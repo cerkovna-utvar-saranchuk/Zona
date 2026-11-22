@@ -48,6 +48,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .card p{margin:0;color:var(--muted);line-height:1.45;font-size:14px}
 .card .big{font-family:var(--display);font-size:19px;color:var(--text)}
 .btn{font:800 16px var(--body);color:#1d1a08;background:var(--rad);border:0;border-radius:10px;padding:13px 18px;cursor:pointer}
+.diff{display:flex;gap:6px}
+.diff button{flex:1;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;padding:7px 4px;font:400 12px var(--display);cursor:pointer}
+.diff button.on{border-color:var(--rad);color:var(--rad);background:rgba(229,195,58,.08)}
 .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
 .btn:focus-visible,.pad button:focus-visible{outline:3px solid var(--text);outline-offset:2px}
 .pad{display:none;justify-content:space-between;align-items:center;gap:10px;padding-bottom:4px}
@@ -155,7 +158,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
     <div class="overlay" id="ov">
       <div class="card">
         <h1 id="ovTitle">Зона відчуження</h1>
-        <p id="ovText">Шість локацій від Залісся до ЧАЕС. Збирай артефакти, обходь аномалії, відстрілюй мутантів і ворожих сталкерів. З полеглих сталкерів падають гранати, а в Прип'яті є відкритий люк. Кинь болт в аномалію, і вона згасне на 5 секунд. Зелені ліхтарі — контрольні точки, а гра зберігається сама. На кожній локації чекає старий УАЗ: сідай і тарань мутантів та сталкерів, а ями перелітай з трамплінів на швидкості. Стеж за станом машини.</p>
+        <p id="ovText">Шість локацій від Залісся до ЧАЕС. Збирай артефакти, обходь аномалії, відстрілюй мутантів і ворожих сталкерів. З полеглих сталкерів падають гранати, а в Прип'яті є відкритий люк. Кинь болт в аномалію, і вона згасне на 5 секунд. Зелені ліхтарі — контрольні точки, гра зберігається сама. Сідай у старий УАЗ, тарань мутантів, перелітай ями з трамплінів. Шукай схованки, продавай артефакти торговцю, а коли КПК попередить про викид — біжи в укриття.</p>
+        <div class="diff" id="diff" hidden role="radiogroup" aria-label="Складність"></div>
         <button class="btn" id="ovBtn">Увійти в Зону</button>
         <button class="btn ghost" id="ovBtn2" hidden></button>
       </div>
@@ -210,6 +214,8 @@ const CFG={
     gravity:{dmg:20, radius:3.2, pull:150, carPull:90, carDmg:10, reveal:6}
   },
   weightMax:40, overloadSpeed:.72,
+  // what the trader sells: [item, pack size, price ₴]; artifacts are bought at ITEMS[..].val
+  shop:[["medkit",1,150],["bandage",1,50],["antirad",1,120],["repair",1,300],["grenade",1,200],["9x18",16,60],["12x70",10,90],["5.45x39",30,140]],
   // blowout: first comes [min,max] s after entering a location, then repeats; warn = time to reach a shelter
   blowout:{first:[75,140], again:[200,280], warn:30, active:12, dps:7, rad:4, artifacts:3, maxShelterDist:2400},
   // falloff:[full-damage distance, zero-point distance, minimum share]
@@ -241,7 +247,16 @@ const ITEMS={
   art4:{name:"Душа", short:"Душа", w:.1, val:120, col:"#ff6f61", art:true}
 };
 const WEAPON_W={pm:.7, sg:2.4, ak:3.3};
-const freshSt=()=>({hp:CFG.player.maxHp, rad:0, bleed:0, cur:"ak", wpn:{pm:{mag:8},sg:{mag:2},ak:{mag:30}},
+// PDA tasks: progress() reads the stalker's counters; reward is added once
+const QUESTS=[
+  {id:"art1", name:"Перший артефакт", desc:"Знайди будь-який артефакт", goal:1, progress:()=>gemTotal, reward:{money:100}},
+  {id:"dogs", name:"Мисливець", desc:"Знищ 6 сліпих псів", goal:6, progress:()=>st.killsBy.dog||0, reward:{medkit:2}},
+  {id:"stash", name:"Схованки", desc:"Знайди 3 схованки", goal:3, progress:()=>st.opened.length, reward:{money:300, repair:1}},
+  {id:"sucker", name:"Кровосос", desc:"Убий кровососа", goal:1, progress:()=>st.killsBy.bloodsucker||0, reward:{money:500, "5.45x39":60}},
+  {id:"trade", name:"Ділова людина", desc:"Продай торговцю 10 артефактів", goal:10, progress:()=>st.sold||0, reward:{money:400}},
+  {id:"psi", name:"Голова на плечах", desc:"Знищ контролера", goal:1, progress:()=>st.killsBy.controller||0, reward:{money:700, antirad:2}}
+];
+const freshSt=()=>({hp:CFG.player.maxHp, rad:0, bleed:0, money:0, sold:0, killsBy:{}, opened:[], quests:{}, cur:"ak", wpn:{pm:{mag:8},sg:{mag:2},ak:{mag:30}},
   items:{medkit:2, bandage:2, antirad:1, repair:1, grenade:2, "9x18":32, "12x70":10, "5.45x39":60}});
 const carried=()=>Object.entries(st.items).reduce((s,[k,n])=>s+(ITEMS[k]?ITEMS[k].w*n:0),0)+Object.values(WEAPON_W).reduce((a,b)=>a+b,0);
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -259,33 +274,33 @@ const THEMES={
 // Ground is a height map: hills are [col, widthCols, heightPx]; pits get an automatic ramp in front of them,
 // wagons ("W") get one on their left side so the UAZ can drive up.
 const LEVELS=[
- {name:"Залісся", weather:{fog:.35}, items:[[13,"medkit"],[40,"bandage"]], theme:"village", w:66, gaps:[[16,3],[29,3],[45,3]],
+ {name:"Залісся", stashes:[[39,{"9x18":16,medkit:1}]], trader:1, weather:{fog:.35}, items:[[13,"medkit"],[40,"bandage"]], theme:"village", w:66, gaps:[[16,3],[29,3],[45,3]],
   hills:[[8,4,36],[20,5,44],[32,4,30],[51,6,60]],
   rad:[[57,3,5]], blocks:[["F",60,9,1],["^",37,9,2]],
   gems:[[6,8],[8,7],[17,7],[18,7],[22,6],[23,6],[30,7],[34,6],[38,6],[46,7],[53,6],[54,6],[60,8]],
   enemies:[[22,9,"dog"],[24,9,"dog"],[34,9,"boar"],[58,9,"stalker"],[27,4,"crow"]], start:2, cps:[33], flag:63, car:5},
- {name:"Рудий ліс", weather:{fog:.55, rain:.25}, shelters:[[37,3],[70,2]], items:[[30,"medkit"],[60,"medkit"],[39,"bandage"],[67,"antirad"]], theme:"forest", w:80, gaps:[[12,3],[22,3],[33,4],[50,3],[64,3]],
+ {name:"Рудий ліс", stashes:[[59,{"12x70":8,bandage:1}],[45,{antirad:1,"5.45x39":30}]], weather:{fog:.55, rain:.25}, shelters:[[37,3],[70,2]], items:[[30,"medkit"],[60,"medkit"],[39,"bandage"],[67,"antirad"]], theme:"forest", w:80, gaps:[[12,3],[22,3],[33,4],[50,3],[64,3]],
   hills:[[5,3,40],[15,3,30],[25,4,40],[53,6,72]],
   rad:[[56,4,8]], blocks:[["F",44,9,1],["V",73,9,1],["^",42,9,2],["^",68,9,2]],
   gems:[[6,7],[13,7],[16,7],[19,7],[23,7],[26,6],[28,6],[34,7],[35,7],[40,7],[45,7],[51,7],[56,5],[65,7],[72,8]],
   enemies:[[18,9,"boar"],[28,9,"dog"],[29,9,"dog"],[40,9,"stalker"],[47,9,"snork"],[71,9,"stalker"],[75,9,"dog"],[76,9,"dog"],[20,4,"crow"],[47,3,"crow"]], start:2, cps:[39], flag:77, car:2},
- {name:"Прип'ять", weather:{rain:.7, fog:.3}, shelters:[[39,2],[83,3]], items:[[27,"medkit"],[70,"medkit"],[35,"antirad"],[49,"repair"]], theme:"town", w:90, gaps:[[10,3],[20,3],[30,4],[45,3],[56,4],[72,3]],
+ {name:"Прип'ять", stashes:[[13,{"5.45x39":30,grenade:1}],[64,{medkit:1,repair:1}]], weather:{rain:.7, fog:.3}, shelters:[[39,2],[83,3]], items:[[27,"medkit"],[70,"medkit"],[35,"antirad"],[49,"repair"]], theme:"town", w:90, gaps:[[10,3],[20,3],[30,4],[45,3],[56,4],[72,3]],
   hills:[[23,3,36],[60,3,30],[79,4,60]],
   rad:[[34,3,10],[75,4,10]], blocks:[["F",48,9,1],["V",86,9,1],["^",14,9,2],["^",37,9,2],["^",65,9,2]],
   gems:[[11,7],[15,7],[21,7],[24,6],[25,6],[31,7],[32,7],[39,7],[43,7],[46,7],[57,7],[58,7],[61,6],[67,7],[73,7],[80,6],[81,6]],
   enemies:[[17,9,"dog"],[25,9,"stalker"],[39,9,"snork"],[50,9,"stalker"],[53,9,"bloodsucker"],[76,9,"dog"],[78,9,"snork"],[84,9,"bloodsucker"],[34,4,"crow"],[60,4,"crow"]], start:2, cps:[49], flag:88, hatch:{col:63,ret:77}, car:3},
- {name:"Станція Янів", weather:{night:1, fog:.25}, shelters:[[2,3],[46,2]], items:[[37,"medkit"],[60,"medkit"],[47,"repair"],[93,"antirad"]], theme:"rail", w:100, gaps:[[14,3],[31,3],[42,4],[64,3],[72,3],[89,3]],
+ {name:"Станція Янів", stashes:[[34,{"5.45x39":60,bandage:1}],[96,{medkit:1,antirad:1}]], trader:47, weather:{night:1, fog:.25}, shelters:[[2,3],[46,2]], items:[[37,"medkit"],[60,"medkit"],[47,"repair"],[93,"antirad"]], theme:"rail", w:100, gaps:[[14,3],[31,3],[42,4],[64,3],[72,3],[89,3]],
   rad:[[92,4,12]], blocks:[["F",35,9,1],["V",9,9,1],["W",21,8,6],["W",21,9,6],["W",52,8,5],["W",52,9,5],["^",58,9,2],["W",79,8,4],["W",79,9,4],["^",83,9,2]],
   gems:[[10,7],[15,7],[22,6],[25,6],[32,7],[36,7],[43,6],[44,7],[53,6],[55,6],[65,7],[68,7],[73,7],[80,6],[86,7],[90,7],[94,8]],
   enemies:[[12,9,"dog"],[13,9,"dog"],[23,7,"stalker"],[36,9,"stalker"],[47,9,"boar"],[54,7,"dog"],[67,9,"snork"],[93,9,"stalker"],[95,9,"bloodsucker"],[33,4,"crow"],[66,4,"crow"]],
   start:2, cps:[46], flag:97, car:4},
- {name:"Радар «Дуга»", weather:{storm:1, rain:.9, night:.55}, shelters:[[3,3],[68,2],[98,4]], items:[[41,"medkit"],[70,"medkit"],[57,"antirad"],[31,"repair"]], theme:"duga", w:105, gaps:[[12,3],[22,4],[36,3],[46,4],[62,3],[74,4],[90,3]],
+ {name:"Радар «Дуга»", stashes:[[26,{"12x70":10,medkit:1}],[85,{grenade:2,"5.45x39":30}]], weather:{storm:1, rain:.9, night:.55}, shelters:[[3,3],[68,2],[98,4]], items:[[41,"medkit"],[70,"medkit"],[57,"antirad"],[31,"repair"]], theme:"duga", w:105, gaps:[[12,3],[22,4],[36,3],[46,4],[62,3],[74,4],[90,3]],
   hills:[[27,4,40],[51,5,56],[78,4,48]],
   rad:[[56,2,14],[93,3,14]], blocks:[["F",40,9,1],["V",16,9,1],["^",66,9,2],["^",83,9,2],["^",96,9,2]],
   gems:[[9,8],[13,7],[16,7],[18,7],[23,7],[24,7],[25,7],[28,6],[30,6],[37,7],[40,7],[44,7],[47,7],[48,7],[53,5],[57,7],[63,7],[67,7],[70,7],[75,7],[76,7],[79,6],[85,7],[91,7],[97,7],[99,7]],
   enemies:[[8,9,"dog"],[18,9,"stalker"],[32,9,"snork"],[39,9,"stalker"],[43,9,"snork"],[55,9,"controller"],[70,9,"stalker"],[68,9,"bloodsucker"],[86,9,"boar"],[94,9,"controller"],[16,4,"crow"],[50,3,"crow"],[78,3,"crow"]],
   start:2, cps:[54], flag:102, car:4},
- {name:"ЧАЕС", weather:{night:1, storm:1, rain:.45, fog:.3}, shelters:[[1,3],[62,1],[66,2],[95,1]], items:[[34,"medkit"],[62,"medkit"],[97,"medkit"],[67,"repair"],[103,"bandage"],[108,"antirad"]], theme:"npp", w:115, gaps:[[10,3],[20,3],[30,4],[47,3],[58,4],[76,3],[86,4],[100,3]],
+ {name:"ЧАЕС", stashes:[[13,{medkit:1,bandage:1}],[103,{"5.45x39":60,grenade:1}]], weather:{night:1, storm:1, rain:.45, fog:.3}, shelters:[[1,3],[62,1],[66,2],[95,1]], items:[[34,"medkit"],[62,"medkit"],[97,"medkit"],[67,"repair"],[103,"bandage"],[108,"antirad"]], theme:"npp", w:115, gaps:[[10,3],[20,3],[30,4],[47,3],[58,4],[76,3],[86,4],[100,3]],
   hills:[[23,3,40],[50,4,36],[63,3,30],[79,3,50],[104,3,56]],
   rad:[[90,3,16],[107,4,12]], blocks:[["F",41,9,1],["F",70,9,1],["V",35,9,1],["^",14,9,2],["^",38,9,2],["^",68,9,2],["^",93,9,2]],
   gems:[[11,7],[15,6],[21,7],[24,6],[25,6],[31,7],[32,7],[35,7],[41,7],[44,7],[48,7],[52,6],[59,7],[60,7],[64,6],[70,7],[72,7],[77,7],[80,6],[87,7],[96,7],[101,7],[105,6]],
@@ -515,7 +530,7 @@ function overlay(title,text,btn,action,btn2,action2){
   document.querySelectorAll(".pad button").forEach(b=>b.classList.remove("on"));
   setTimeout(()=>$("ovBtn").focus({preventScroll:true}),50);
 }
-function closeOverlay(a){$("ov").hidden=true;ovAction=ovAction2=null;if(a)a();running=true;last=performance.now();}
+function closeOverlay(a){$("ov").hidden=true;$("diff").hidden=true;ovAction=ovAction2=null;if(a)a();running=true;last=performance.now();}
 $("ovBtn").addEventListener("click",()=>closeOverlay(ovAction));
 $("ovBtn2").addEventListener("click",()=>closeOverlay(ovAction2));
 // a level is always entered through here, so "restart location" has a snapshot to go back to
@@ -549,6 +564,7 @@ function loadGame(){
     const fs=freshSt();
     st=Object.assign(fs,d.st);st.items=Object.assign(freshSt().items,d.st.items);
     st.wpn=Object.assign(freshSt().wpn,d.st.wpn);if(!CFG.weapons[st.cur])st.cur="ak";
+    st.killsBy=Object.assign({},d.st.killsBy);st.opened=Array.isArray(d.st.opened)?d.st.opened:[];st.quests=Object.assign({},d.st.quests);
     st.hp=Math.max(1,Math.min(CFG.player.maxHp,+st.hp||CFG.player.maxHp));
     gemTotal=d.gemTotal|0;kills=d.kills|0;levelStart=d.ls||{st:clone(st),gemTotal,kills};
     build(lvlIdx);
@@ -599,20 +615,56 @@ function useItem(id){
   hud();
 }
 const note=s=>texts.push({x:p.x+p.w/2,y:p.y-8,s,life:1});
+function give(r){const got=[];for(const [k,n] of Object.entries(r)){if(k==="money")st.money=(st.money||0)+n;else st.items[k]=(st.items[k]||0)+n;got.push(k==="money"?`${n} ₴`:`${ITEMS[k].short} ×${n}`);}hud();return got.join(", ");}
+function questCheck(){
+  for(const q of QUESTS){
+    if(st.quests[q.id]||q.progress()<q.goal)continue;
+    st.quests[q.id]=1;
+    pda(`Завдання «${q.name}» виконано. Нагорода: ${give(q.reward)}`,false,6);
+  }
+}
+// ---------- stashes & trader ----------
+const stashId=c=>L.name+":"+c;
+const stashOpen=c=>st.opened.includes(stashId(c));
+function nearStash(){if(L.sub||driving())return null;for(const [c,loot] of L.stashes||[]){if(!stashOpen(c)&&Math.abs(c*T+16-(p.x+p.w/2))<30)return {c,loot};}return null;}
+const nearTrader=()=>!L.sub&&!driving()&&L.trader!=null&&Math.abs(L.trader*T+16-(p.x+p.w/2))<36;
+function openStash(sh){
+  st.opened.push(stashId(sh.c));SFX.pickup();burst(sh.c*T+16,topAt(sh.c*T+16,2)-10,"#c9a24a",10,.5);
+  texts.push({x:sh.c*T+16,y:topAt(sh.c*T+16,2)-30,s:"Схованка: "+give(sh.loot),life:2});
+  questCheck();
+}
+// the ДІЯ button does whatever is in reach: trader, stash, then the UAZ
+function action(){
+  if(nearTrader()){openTrade();return;}
+  const sh=nearStash();if(sh){openStash(sh);return;}
+  toggleCar();
+}
 function pda(msg,alarm,sec=5){$("pdaText").textContent=msg;$("pda").classList.toggle("alarm",!!alarm);$("pda").hidden=false;pdaT=sec;SFX.pda();}
 
 // ---------- backpack (pauses the game) ----------
-let invTab="items";
-function openInv(){if(!running||st.hp<=0)return;running=false;SFX.ambient(0,0,0);$("wpanel").hidden=true;$("inv").hidden=false;renderInv();}
+let invTab="items", invMode="bag";
+function openInv(){if(!running||st.hp<=0)return;invMode="bag";if(invTab!=="pda")invTab="items";running=false;SFX.ambient(0,0,0);$("wpanel").hidden=true;$("inv").hidden=false;renderInv();}
+function openTrade(){if(!running)return;invMode="trade";invTab="buy";running=false;SFX.ambient(0,0,0);$("wpanel").hidden=true;$("inv").hidden=false;renderInv();}
 function closeInv(){if($("inv").hidden)return;$("inv").hidden=true;running=true;last=performance.now();}
 function renderInv(){
   const w=carried(), it=st.items;
   $("invW").textContent=`${w.toFixed(1)} / ${CFG.weightMax} кг`;$("invW").classList.toggle("over",w>CFG.weightMax);
   $("invStat").innerHTML=`<span>Здоров'я <b>${Math.ceil(st.hp)}</b></span><span>Радіація <b>${Math.round(st.rad)}</b></span>`+
     `<span>Кровотеча <b>${st.bleed?"так":"ні"}</b></span>${car?`<span>УАЗ <b>${Math.round(car.hp)}%</b></span>`:""}<span>Гроші <b>${st.money||0} ₴</b></span>`;
-  for(const b of $("invTabs").children)b.classList.toggle("on",b.dataset.tab===invTab);
-  if(invTab==="pda"){$("invList").innerHTML=pdaHtml();return;}
   const row=(dot,name,sub,count,btn)=>`<div class="row">${dot?`<span class="dot" style="background:${dot}"></span>`:""}<div class="nm">${name}${sub?`<small>${sub}</small>`:""}</div><span class="ct">${count}</span>${btn||""}</div>`;
+  const tabs=invMode==="trade"?[["buy","Купити"],["sell","Продати"]]:[["items","Речі"],["pda","КПК"]];
+  $("invTitle").textContent=invMode==="trade"?"Торговець":"Рюкзак";
+  $("invTabs").innerHTML=tabs.map(([k,n])=>`<button data-tab="${k}" class="${invTab===k?"on":""}">${n}</button>`).join("");
+  if(invTab==="pda"){$("invList").innerHTML=pdaHtml();return;}
+  if(invTab==="buy"){
+    $("invList").innerHTML=`<h3>Товар · у тебе ${st.money||0} ₴</h3>`+CFG.shop.map(([k,n,price],i)=>row(null,`${ITEMS[k].name}${n>1?` ×${n}`:""}`,`маєш ${it[k]||0}`,`${price} ₴`,`<button data-act="b:${i}" ${(st.money||0)>=price?"":"disabled"}>Купити</button>`)).join("");
+    return;
+  }
+  if(invTab==="sell"){
+    const arts=Object.keys(ITEMS).filter(k=>ITEMS[k].art&&it[k]);
+    $("invList").innerHTML=`<h3>Артефакти · у тебе ${st.money||0} ₴</h3>`+(arts.length?arts.map(k=>row(ITEMS[k].col,ITEMS[k].name,`${ITEMS[k].val} ₴ за штуку`,it[k],`<button data-act="s:${k}">Продати</button><button data-act="S:${k}">Усі</button>`)).join(""):`<div class="row"><div class="nm"><small>Немає артефактів на продаж</small></div></div>`);
+    return;
+  }
   let h="<h3>Зброя</h3>";
   for(const id of ["pm","sg","ak"]){const c=CFG.weapons[id];
     h+=row(null,c.name,`${ITEMS[c.ammo].name} · ${WEAPON_W[id]} кг`,`${st.wpn[id].mag}/${c.mag}`,`<button data-act="w:${id}" class="${st.cur===id?"cur":""}">${st.cur===id?"В руках":"Взяти"}</button>`);}
@@ -626,9 +678,13 @@ function renderInv(){
   $("invList").innerHTML=h;
 }
 function pdaHtml(){
-  return `<h3>Стан</h3><div class="row"><div class="nm">Локація<small>${L.name}</small></div></div>`+
-    `<div class="row"><div class="nm">Знайдено артефактів</div><span class="ct">${gemTotal}</span></div>`+
-    `<div class="row"><div class="nm">Знищено ворогів</div><span class="ct">${kills}</span></div>`;
+  const q=QUESTS.map(q=>{const done=!!st.quests[q.id], n=Math.min(q.goal,q.progress());
+    return `<div class="row"><div class="nm">${done?"✓ ":""}${q.name}<small>${q.desc}</small></div><span class="ct">${done?"готово":`${n}/${q.goal}`}</span></div>`;}).join("");
+  const map=LEVELS.map((l,i)=>`<div class="row"><div class="nm">${i<lvlIdx?"✓ ":i===lvlIdx?"● ":""}${l.name}${i===lvlIdx?"<small>ти тут</small>":""}</div><span class="ct">${i<lvlIdx?"пройдено":i===lvlIdx?"":"—"}</span></div>`).join("");
+  return `<h3>Завдання</h3>${q}<h3>Карта Зони</h3>${map}`+
+    `<h3>Статистика</h3><div class="row"><div class="nm">Знайдено артефактів</div><span class="ct">${gemTotal}</span></div>`+
+    `<div class="row"><div class="nm">Знищено ворогів</div><span class="ct">${kills}</span></div>`+
+    `<div class="row"><div class="nm">Схованок знайдено</div><span class="ct">${st.opened.length}</span></div>`;
 }
 $("bInv").addEventListener("click",()=>{if($("inv").hidden)openInv();else closeInv();});
 $("invClose").addEventListener("click",closeInv);
@@ -636,7 +692,10 @@ $("invTabs").addEventListener("click",e=>{const b=e.target.closest("button");if(
 $("invList").addEventListener("click",e=>{
   const b=e.target.closest("button[data-act]");if(!b)return;
   const [k,id]=b.dataset.act.split(":");
-  if(k==="w")selectWeapon(id);else useItem(id);
+  if(k==="w")selectWeapon(id);
+  else if(k==="b"){const [it,n,price]=CFG.shop[+id];if((st.money||0)>=price){st.money-=price;st.items[it]=(st.items[it]||0)+n;SFX.pickup();hud();}}
+  else if(k==="s"||k==="S"){const n=k==="S"?st.items[id]:1;if(n>0){st.items[id]-=n;st.money=(st.money||0)+ITEMS[id].val*n;st.sold=(st.sold||0)+n;SFX.pickup();questCheck();hud();}}
+  else useItem(id);
   renderInv();
 });
 function loadBest(){try{return +localStorage.getItem("zoneBest")||0}catch(_){return 0}}
@@ -764,7 +823,7 @@ function damage(e,n,kick=0){
     if(e.state==="idle"||e.state==="patrol")detect(e,(p.x+p.w/2)-(e.x+e.w/2));
     if(e.type==="bloodsucker")e.reveal=.6;
   }
-  if(e.hp<=0){e.alive=false;e.state="dead";kills++;hud();burst(e.x+e.w/2,e.y+e.h/2,DEATH_COL[e.type],e.type==="big"?26:12);
+  if(e.hp<=0){e.alive=false;e.state="dead";kills++;st.killsBy[e.type]=(st.killsBy[e.type]||0)+1;questCheck();hud();burst(e.x+e.w/2,e.y+e.h/2,DEATH_COL[e.type],e.type==="big"?26:12);
     if(e.type!=="stalker")burst(e.x+e.w/2,e.y+e.h/2,"#a8c94a",5);
     else{
       const r=Math.random(), drop=r<.15?{kind:"medkit",n:1}:r<.27?{kind:"bandage",n:1}:r<.35?{kind:"antirad",n:1}:r<.47?{kind:"grenade",n:1}:r<.62?{kind:"12x70",n:6}:r<.8?{kind:"9x18",n:16}:{kind:"5.45x39",n:30};
@@ -1202,7 +1261,7 @@ function carPhysics(G){
 function update(){
   time+=dt;
   const ACC=1500, MAX=210, FR=1700, G=1800;
-  if(cReq){cReq=false;toggleCar();}
+  if(cReq){cReq=false;action();}
   if(car&&car.y<VIEW_H+60)carPhysics(G);
   if(driving()){
     gReq=bReq=false;
@@ -1324,7 +1383,7 @@ function update(){
 
   for(const g of gems){
     if(g.taken)continue;
-    if(Math.abs(bd.x+bd.w/2-g.x)<bd.w/2+9&&Math.abs(bd.y+bd.h/2-g.y)<bd.h/2+8){g.taken=true;gemTotal++;const a="art"+g.k;st.items[a]=(st.items[a]||0)+1;hud();burst(g.x,g.y,g.col,10);SFX.pickup();
+    if(Math.abs(bd.x+bd.w/2-g.x)<bd.w/2+9&&Math.abs(bd.y+bd.h/2-g.y)<bd.h/2+8){g.taken=true;gemTotal++;questCheck();const a="art"+g.k;st.items[a]=(st.items[a]||0)+1;hud();burst(g.x,g.y,g.col,10);SFX.pickup();
       texts.push({x:g.x,y:g.y-10,s:ITEMS[a].name,life:1,col:g.col});}
   }
 
@@ -1622,9 +1681,9 @@ function drawCar(){
     ctx.fillStyle="rgba(0,0,0,.5)";ctx.fillRect(c.x+7,c.y-12,c.w-14,4);
     ctx.fillStyle=carCol(c.hp);ctx.fillRect(c.x+7,c.y-12,(c.w-14)*c.hp/CAR_MAX,4);
   }
-  if(!c.drive&&overlap(p,c,14)){
+  if(!c.drive&&overlap(p,c,14)&&!nearStash()&&!nearTrader()){
     ctx.font="800 12px Nunito, system-ui, sans-serif";ctx.textAlign="center";
-    const s=touchUI?"АВТО — сісти в УАЗ":"E — сісти в УАЗ";
+    const s=c.wreck?(touchUI?"ДІЯ — полагодити":"E — полагодити"):touchUI?"ДІЯ — сісти в УАЗ":"E — сісти в УАЗ";
     ctx.fillStyle="#1b1e18";ctx.fillText(s,c.x+c.w/2+1,c.y-17);ctx.fillStyle="#e8f0b0";ctx.fillText(s,c.x+c.w/2,c.y-18);
   }
 }
@@ -1957,6 +2016,28 @@ function draw(){
       }
     }
   }
+  // stashes: a crate under a painted mark
+  for(const [c] of L.stashes||[]){
+    const x=c*T+16, gy=topAt(x,2);if(x<camX-40||x>camX+viewW+40)continue;
+    const open=stashOpen(c);
+    ctx.fillStyle=open?"#4a3a2a":"#6e4a2a";ctx.fillRect(x-12,gy-14,24,14);
+    ctx.fillStyle="rgba(0,0,0,.25)";ctx.fillRect(x-12,gy-8,24,1.5);ctx.fillRect(x-1,gy-14,2,14);
+    if(open){ctx.fillStyle="#3a2c1e";ctx.fillRect(x-13,gy-17,26,4);}
+    else{ctx.strokeStyle="rgba(229,195,58,.85)";ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x-5,gy-30);ctx.lineTo(x+5,gy-20);ctx.moveTo(x+5,gy-30);ctx.lineTo(x-5,gy-20);ctx.stroke();
+      ctx.fillStyle=`rgba(229,195,58,${.15+.1*Math.sin(time*3+c)})`;ctx.beginPath();ctx.arc(x,gy-8,18,0,7);ctx.fill();}
+  }
+  // the trader: a stalker by his crates, lit by a lamp
+  if(L.trader!=null){const x=L.trader*T+16, gy=topAt(x,2);
+    ctx.fillStyle="#4a3a2a";ctx.fillRect(x+8,gy-16,20,16);ctx.fillStyle="#5a4632";ctx.fillRect(x+10,gy-26,14,10);
+    ctx.fillStyle="rgba(240,200,120,.18)";ctx.beginPath();ctx.arc(x,gy-28,34,0,7);ctx.fill();
+    ctx.fillStyle="#26261f";ctx.fillRect(x-7,gy-6,6,6);ctx.fillRect(x+1,gy-6,6,6);
+    ctx.fillStyle="#3d5a3a";rr(x-9,gy-20,18,15,4);ctx.fill();
+    ctx.fillStyle="#6a4a2a";rr(x-12,gy-19,5,11,2);ctx.fill();
+    ctx.fillStyle="#c99b7a";ctx.beginPath();ctx.arc(x,gy-25,6,0,7);ctx.fill();
+    ctx.fillStyle="#2e3a2c";ctx.beginPath();ctx.arc(x,gy-27,6.5,Math.PI,0);ctx.fill();
+    ctx.fillStyle="#111";ctx.fillRect(x+1,gy-26,1.5,1.5);ctx.fillRect(x+4,gy-26,1.5,1.5);
+    ctx.fillStyle="#e5c33a";ctx.font="bold 9px system-ui, sans-serif";ctx.textAlign="center";ctx.fillText("ТОРГОВЕЦЬ",x,gy-38);
+  }
   // shelters: concrete bunkers with a painted sign
   for(const [c,w] of L.shelters||[]){
     const x0=c*T-6, x1=(c+w)*T+6;if(x1<camX-40||x0>camX+viewW+40)continue;
@@ -1979,6 +2060,9 @@ function draw(){
     ctx.fillStyle="#e5c33a";ctx.beginPath();ctx.moveTo(sx,sy-62);ctx.lineTo(sx+13,sy-40);ctx.lineTo(sx-13,sy-40);ctx.closePath();ctx.fill();
     trefoil(sx,sy-47,6,"#1d1a08","#e5c33a");
   }
+  {const s=nearTrader()?"торговець":nearStash()?"відкрити схованку":"";
+    if(s){const t=(touchUI?"ДІЯ — ":"E — ")+s;ctx.font="800 12px Nunito, system-ui, sans-serif";ctx.textAlign="center";
+      ctx.fillStyle="#1b1e18";ctx.fillText(t,p.x+p.w/2+1,p.y-21);ctx.fillStyle="#e8f0b0";ctx.fillText(t,p.x+p.w/2,p.y-22);}}
   // checkpoint lanterns
   for(const c of L.cps){
     const x=c*T+16, on=cpCol>=c;
@@ -2114,6 +2198,10 @@ levelStart={st:clone(st),gemTotal,kills};build(0);ovAction=newGame;
 const best=loadBest();
 if(best)$("ovText").innerHTML+=`<br>Твій рекорд: ${best} артефактів.`;
 $("bMute").textContent=settings.mute?"🔇":"🔊";
+function renderDiff(){$("diff").innerHTML=Object.entries(CFG.difficulty).map(([k,d])=>`<button data-d="${k}" role="radio" aria-checked="${settings.diff===k}" class="${settings.diff===k?"on":""}">${d.name}</button>`).join("");}
+$("diff").addEventListener("click",e=>{const b=e.target.closest("button");if(b){settings.diff=b.dataset.d;saveSettings();renderDiff();}});
+if(!CFG.difficulty[settings.diff])settings.diff="normal";
+renderDiff();$("diff").hidden=false;
 if(readSave()){$("ovBtn").textContent="Продовжити";ovAction=loadGame;$("ovBtn2").hidden=false;$("ovBtn2").textContent="Нова гра";ovAction2=newGame;}
 // leaving the tab pauses the game and keeps progress
 document.addEventListener("visibilitychange",()=>{
