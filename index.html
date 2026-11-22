@@ -85,6 +85,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .wpanel button.cur{border-color:var(--rad);box-shadow:inset 0 0 0 1px var(--rad)}
 .mute,.bag{background:var(--panel);border-color:var(--line);color:var(--text)}
 .radstat{color:var(--rad)}
+.pda{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 24px);display:flex;gap:8px;align-items:baseline;
+  background:rgba(18,26,16,.92);border:1px solid #5a7a4a;border-radius:10px;padding:8px 12px;color:#cfe8b0;font-size:13px;font-weight:800;z-index:2;pointer-events:none}
+.pda b{font:400 11px var(--display);color:#7fe08a;letter-spacing:.08em}
+.pda.alarm{border-color:var(--blood);color:#ffd0c8}
+.pda.alarm b{color:#ff8a7a}
 .radstat.hot{color:#ff8a3a}
 .bleedstat{color:#ff8a7a}
 .inv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:10px;background:rgba(18,20,15,.7);z-index:4}
@@ -137,6 +142,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
   </div>
   <div class="stage">
     <canvas id="c" aria-label="Ігрове поле"></canvas>
+    <div class="pda" id="pda" hidden role="status" aria-live="polite"><b>КПК</b><span id="pdaText"></span></div>
     <div class="wpanel" id="wpanel" hidden aria-label="Вибір зброї"></div>
     <div class="inv" id="inv" hidden>
       <div class="invcard" role="dialog" aria-label="Рюкзак">
@@ -169,7 +175,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <button class="act jump" id="bJ" aria-label="Стрибок">СТРИБОК</button>
     </div>
   </div>
-  <div class="hint">Стрілки або A / D — рух, пробіл або W — стрибок, J або F — вогонь, 1–4 — зброя, R — перезарядити, G — граната, B — болт, H — аптечка, E — дія / УАЗ, M — звук</div>
+  <div class="hint">Стрілки або A / D — рух, пробіл або W — стрибок, J або F — вогонь, 1–4 — зброя, R — перезарядити, G — граната, B — болт, H — аптечка, E — дія / УАЗ, M — звук, I — рюкзак, T — ліхтар</div>
 </div>
 
 <script>
@@ -204,6 +210,8 @@ const CFG={
     gravity:{dmg:20, radius:3.2, pull:150, carPull:90, carDmg:10, reveal:6}
   },
   weightMax:40, overloadSpeed:.72,
+  // blowout: first comes [min,max] s after entering a location, then repeats; warn = time to reach a shelter
+  blowout:{first:[75,140], again:[200,280], warn:30, active:12, dps:7, rad:4, artifacts:3, maxShelterDist:2400},
   // falloff:[full-damage distance, zero-point distance, minimum share]
   weapons:{
     pm:{name:"ПМ", ammo:"9x18", mag:8, dmg:18, pellets:1, rate:.22, auto:false, reload:.9, spread:.015, speed:760, range:420, recoil:1.2, kick:50},
@@ -251,33 +259,33 @@ const THEMES={
 // Ground is a height map: hills are [col, widthCols, heightPx]; pits get an automatic ramp in front of them,
 // wagons ("W") get one on their left side so the UAZ can drive up.
 const LEVELS=[
- {name:"Залісся", items:[[13,"medkit"],[40,"bandage"]], theme:"village", w:66, gaps:[[16,3],[29,3],[45,3]],
+ {name:"Залісся", weather:{fog:.35}, items:[[13,"medkit"],[40,"bandage"]], theme:"village", w:66, gaps:[[16,3],[29,3],[45,3]],
   hills:[[8,4,36],[20,5,44],[32,4,30],[51,6,60]],
   rad:[[57,3,5]], blocks:[["F",60,9,1],["^",37,9,2]],
   gems:[[6,8],[8,7],[17,7],[18,7],[22,6],[23,6],[30,7],[34,6],[38,6],[46,7],[53,6],[54,6],[60,8]],
   enemies:[[22,9,"dog"],[24,9,"dog"],[34,9,"boar"],[58,9,"stalker"],[27,4,"crow"]], start:2, cps:[33], flag:63, car:5},
- {name:"Рудий ліс", items:[[30,"medkit"],[60,"medkit"],[39,"bandage"],[67,"antirad"]], theme:"forest", w:80, gaps:[[12,3],[22,3],[33,4],[50,3],[64,3]],
+ {name:"Рудий ліс", weather:{fog:.55, rain:.25}, shelters:[[37,3],[70,2]], items:[[30,"medkit"],[60,"medkit"],[39,"bandage"],[67,"antirad"]], theme:"forest", w:80, gaps:[[12,3],[22,3],[33,4],[50,3],[64,3]],
   hills:[[5,3,40],[15,3,30],[25,4,40],[53,6,72]],
   rad:[[56,4,8]], blocks:[["F",44,9,1],["V",73,9,1],["^",42,9,2],["^",68,9,2]],
   gems:[[6,7],[13,7],[16,7],[19,7],[23,7],[26,6],[28,6],[34,7],[35,7],[40,7],[45,7],[51,7],[56,5],[65,7],[72,8]],
   enemies:[[18,9,"boar"],[28,9,"dog"],[29,9,"dog"],[40,9,"stalker"],[47,9,"snork"],[71,9,"stalker"],[75,9,"dog"],[76,9,"dog"],[20,4,"crow"],[47,3,"crow"]], start:2, cps:[39], flag:77, car:2},
- {name:"Прип'ять", items:[[27,"medkit"],[70,"medkit"],[35,"antirad"],[49,"repair"]], theme:"town", w:90, gaps:[[10,3],[20,3],[30,4],[45,3],[56,4],[72,3]],
+ {name:"Прип'ять", weather:{rain:.7, fog:.3}, shelters:[[39,2],[83,3]], items:[[27,"medkit"],[70,"medkit"],[35,"antirad"],[49,"repair"]], theme:"town", w:90, gaps:[[10,3],[20,3],[30,4],[45,3],[56,4],[72,3]],
   hills:[[23,3,36],[60,3,30],[79,4,60]],
   rad:[[34,3,10],[75,4,10]], blocks:[["F",48,9,1],["V",86,9,1],["^",14,9,2],["^",37,9,2],["^",65,9,2]],
   gems:[[11,7],[15,7],[21,7],[24,6],[25,6],[31,7],[32,7],[39,7],[43,7],[46,7],[57,7],[58,7],[61,6],[67,7],[73,7],[80,6],[81,6]],
   enemies:[[17,9,"dog"],[25,9,"stalker"],[39,9,"snork"],[50,9,"stalker"],[53,9,"bloodsucker"],[76,9,"dog"],[78,9,"snork"],[84,9,"bloodsucker"],[34,4,"crow"],[60,4,"crow"]], start:2, cps:[49], flag:88, hatch:{col:63,ret:77}, car:3},
- {name:"Станція Янів", items:[[37,"medkit"],[60,"medkit"],[47,"repair"],[93,"antirad"]], theme:"rail", w:100, gaps:[[14,3],[31,3],[42,4],[64,3],[72,3],[89,3]],
-  rad:[[92,4,12]], blocks:[["F",35,9,1],["V",7,9,1],["W",21,8,6],["W",21,9,6],["W",52,8,5],["W",52,9,5],["^",58,9,2],["W",79,8,4],["W",79,9,4],["^",83,9,2]],
+ {name:"Станція Янів", weather:{night:1, fog:.25}, shelters:[[2,3],[46,2]], items:[[37,"medkit"],[60,"medkit"],[47,"repair"],[93,"antirad"]], theme:"rail", w:100, gaps:[[14,3],[31,3],[42,4],[64,3],[72,3],[89,3]],
+  rad:[[92,4,12]], blocks:[["F",35,9,1],["V",9,9,1],["W",21,8,6],["W",21,9,6],["W",52,8,5],["W",52,9,5],["^",58,9,2],["W",79,8,4],["W",79,9,4],["^",83,9,2]],
   gems:[[10,7],[15,7],[22,6],[25,6],[32,7],[36,7],[43,6],[44,7],[53,6],[55,6],[65,7],[68,7],[73,7],[80,6],[86,7],[90,7],[94,8]],
   enemies:[[12,9,"dog"],[13,9,"dog"],[23,7,"stalker"],[36,9,"stalker"],[47,9,"boar"],[54,7,"dog"],[67,9,"snork"],[93,9,"stalker"],[95,9,"bloodsucker"],[33,4,"crow"],[66,4,"crow"]],
   start:2, cps:[46], flag:97, car:4},
- {name:"Радар «Дуга»", items:[[41,"medkit"],[70,"medkit"],[57,"antirad"],[31,"repair"]], theme:"duga", w:105, gaps:[[12,3],[22,4],[36,3],[46,4],[62,3],[74,4],[90,3]],
+ {name:"Радар «Дуга»", weather:{storm:1, rain:.9, night:.55}, shelters:[[3,3],[68,2],[98,4]], items:[[41,"medkit"],[70,"medkit"],[57,"antirad"],[31,"repair"]], theme:"duga", w:105, gaps:[[12,3],[22,4],[36,3],[46,4],[62,3],[74,4],[90,3]],
   hills:[[27,4,40],[51,5,56],[78,4,48]],
   rad:[[56,2,14],[93,3,14]], blocks:[["F",40,9,1],["V",16,9,1],["^",66,9,2],["^",83,9,2],["^",96,9,2]],
   gems:[[9,8],[13,7],[16,7],[18,7],[23,7],[24,7],[25,7],[28,6],[30,6],[37,7],[40,7],[44,7],[47,7],[48,7],[53,5],[57,7],[63,7],[67,7],[70,7],[75,7],[76,7],[79,6],[85,7],[91,7],[97,7],[99,7]],
   enemies:[[8,9,"dog"],[18,9,"stalker"],[32,9,"snork"],[39,9,"stalker"],[43,9,"snork"],[55,9,"controller"],[70,9,"stalker"],[68,9,"bloodsucker"],[86,9,"boar"],[94,9,"controller"],[16,4,"crow"],[50,3,"crow"],[78,3,"crow"]],
   start:2, cps:[54], flag:102, car:4},
- {name:"ЧАЕС", items:[[34,"medkit"],[62,"medkit"],[97,"medkit"],[67,"repair"],[103,"bandage"],[108,"antirad"]], theme:"npp", w:115, gaps:[[10,3],[20,3],[30,4],[47,3],[58,4],[76,3],[86,4],[100,3]],
+ {name:"ЧАЕС", weather:{night:1, storm:1, rain:.45, fog:.3}, shelters:[[1,3],[62,1],[66,2],[95,1]], items:[[34,"medkit"],[62,"medkit"],[97,"medkit"],[67,"repair"],[103,"bandage"],[108,"antirad"]], theme:"npp", w:115, gaps:[[10,3],[20,3],[30,4],[47,3],[58,4],[76,3],[86,4],[100,3]],
   hills:[[23,3,40],[50,4,36],[63,3,30],[79,3,50],[104,3,56]],
   rad:[[90,3,16],[107,4,12]], blocks:[["F",41,9,1],["F",70,9,1],["V",35,9,1],["^",14,9,2],["^",38,9,2],["^",68,9,2],["^",93,9,2]],
   gems:[[11,7],[15,6],[21,7],[24,6],[25,6],[31,7],[32,7],[35,7],[41,7],[44,7],[48,7],[52,6],[59,7],[60,7],[64,6],[70,7],[72,7],[77,7],[80,6],[87,7],[96,7],[101,7],[105,6]],
@@ -305,7 +313,8 @@ window.addEventListener("resize",resize);
 const rnd=n=>{const s=Math.sin(n*12.9898+78.233)*43758.5453;return s-Math.floor(s);};
 
 // ---------- state ----------
-let L, TH, grid, gems, enemies, bullets, ebullets, particles, p, camX=0, lvlIdx=0, st=freshSt(), levelStart=null, fx={hit:0}, saveT=0, settings={diff:"normal"}, gemTotal=0, kills=0, running=false, time=0, cpCol=2, grenades=[], pickups=[], booms=[], texts=[], shake=0, gReq=false, banner="", bannerT=0, saved=null, bolts=[], bReq=false, boltCd=0, quiet={}, car=null, cReq=false, fireReq=false, rReq=false, anoms=[];
+let L, TH, grid, gems, enemies, bullets, ebullets, particles, p, camX=0, lvlIdx=0, st=freshSt(), levelStart=null, fx={hit:0}, saveT=0, settings={diff:"normal"}, gemTotal=0, kills=0, running=false, time=0, cpCol=2, grenades=[], pickups=[], booms=[], texts=[], shake=0, gReq=false, banner="", bannerT=0, saved=null, bolts=[], bReq=false, boltCd=0, quiet={}, car=null, cReq=false, fireReq=false, rReq=false, anoms=[],
+  wx={rain:0,fog:0,night:0,storm:0,flash:0,nextBolt:0,boltX:0}, bo={phase:"none",t:0,next:1e9}, pdaT=0;
 const CAR_MAX=100;CFG.car={max:CAR_MAX};
 const driving=()=>car&&car.drive;
 const body=()=>driving()?car:p;
@@ -346,6 +355,11 @@ function buildLevel(def){
     if(isHazard(t)&&tile(c-1,r)!==t){let e=c;while(tile(e+1,r)===t)e++;
       anoms.push({t,r,c0:c,c1:e,x0:c*T,x1:(e+1)*T,cx:(c+e+1)/2*T,ph:rnd(c*7+r)*5,reveal:0,cool:0});}}
   bullets=[];particles=[];grenades=[];booms=[];texts=[];bolts=[];quiet={};cpCol=L.start;
+  const w=L.weather||{};
+  wx.rain=w.rain||0;wx.fog=w.fog||0;wx.night=w.night||0;wx.storm=w.storm||0;wx.flash=0;wx.nextBolt=time+4+Math.random()*6;
+  // a little randomness: some visits get a shower
+  if(!L.sub&&!wx.rain&&Math.random()<.3)wx.rain=.3+Math.random()*.3;
+  bo.phase="none";bo.next=lvlIdx>0&&!L.sub&&(L.shelters||[]).length?time+CFG.blowout.first[0]+Math.random()*(CFG.blowout.first[1]-CFG.blowout.first[0]):1e9;
   car=L.car!=null?{x:L.car*T,y:topAt(L.car*T+32,2)-34,ang:0,w:64,h:34,vx:0,vy:0,onGround:false,coyote:0,face:1,wr:0,hp:CAR_MAX,hit:0,touch:0,zap:0,drive:false,wreck:false,smoke:0}:null;
   spawn();
   $("lvlName").textContent=L.name;
@@ -444,7 +458,7 @@ function moveY(o){
 
 // ---------- input ----------
 const keys={left:false,right:false,jump:false,fire:false,gren:false,bolt:false,car:false};
-const KMAP={ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",Space:"jump",ArrowUp:"jump",KeyW:"jump",KeyJ:"fire",KeyF:"fire",KeyX:"fire",KeyK:"fire",KeyG:"gren",KeyL:"gren",KeyB:"bolt",KeyQ:"bolt",KeyE:"car",KeyC:"car",KeyH:"med",KeyR:"reload",Digit1:"w1",Digit2:"w2",Digit3:"w3",Digit4:"w4",KeyM:"mute",KeyI:"inv",Tab:"inv",Escape:"esc",KeyN:"bandage"};
+const KMAP={ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",Space:"jump",ArrowUp:"jump",KeyW:"jump",KeyJ:"fire",KeyF:"fire",KeyX:"fire",KeyK:"fire",KeyG:"gren",KeyL:"gren",KeyB:"bolt",KeyQ:"bolt",KeyE:"car",KeyC:"car",KeyH:"med",KeyR:"reload",Digit1:"w1",Digit2:"w2",Digit3:"w3",Digit4:"w4",KeyM:"mute",KeyI:"inv",Tab:"inv",Escape:"esc",KeyN:"bandage",KeyT:"light"};
 addEventListener("keydown",e=>{const k=KMAP[e.code];if(!k)return;e.preventDefault();
   if(!$("inv").hidden&&k!=="inv"&&k!=="esc")return;
   if(k==="gren"&&!e.repeat)gReq=true;
@@ -454,6 +468,7 @@ addEventListener("keydown",e=>{const k=KMAP[e.code];if(!k)return;e.preventDefaul
   if(k==="bandage"&&!e.repeat&&running)useItem("bandage");
   if(k==="inv"&&!e.repeat){if($("inv").hidden)openInv();else closeInv();}
   if(k==="esc"&&!e.repeat)closeInv();
+  if(k==="light"&&!e.repeat){settings.light=!settings.light;saveSettings();}
   if(k==="fire"&&!e.repeat)fireReq=true;
   if(k==="reload"&&!e.repeat)rReq=true;
   if(k==="mute"&&!e.repeat)toggleMute();
@@ -495,7 +510,7 @@ let ovAction=null, ovAction2=null;
 function overlay(title,text,btn,action,btn2,action2){
   $("ovTitle").textContent=title;$("ovText").innerHTML=text;$("ovBtn").textContent=btn;
   $("ovBtn2").hidden=!btn2;$("ovBtn2").textContent=btn2||"";ovAction2=action2||null;
-  ovAction=action;$("ov").hidden=false;running=false;
+  ovAction=action;$("ov").hidden=false;running=false;SFX.ambient(0,0,0);
   for(const k in keys)keys[k]=false;
   document.querySelectorAll(".pad button").forEach(b=>b.classList.remove("on"));
   setTimeout(()=>$("ovBtn").focus({preventScroll:true}),50);
@@ -584,10 +599,11 @@ function useItem(id){
   hud();
 }
 const note=s=>texts.push({x:p.x+p.w/2,y:p.y-8,s,life:1});
+function pda(msg,alarm,sec=5){$("pdaText").textContent=msg;$("pda").classList.toggle("alarm",!!alarm);$("pda").hidden=false;pdaT=sec;SFX.pda();}
 
 // ---------- backpack (pauses the game) ----------
 let invTab="items";
-function openInv(){if(!running||st.hp<=0)return;running=false;$("wpanel").hidden=true;$("inv").hidden=false;renderInv();}
+function openInv(){if(!running||st.hp<=0)return;running=false;SFX.ambient(0,0,0);$("wpanel").hidden=true;$("inv").hidden=false;renderInv();}
 function closeInv(){if($("inv").hidden)return;$("inv").hidden=true;running=true;last=performance.now();}
 function renderInv(){
   const w=carried(), it=st.items;
@@ -716,14 +732,15 @@ function anomalies(){
   return false;
 }
 function enterSub(){
-  saved={L,TH,grid,gems,enemies,pickups,car,terr,ret:L.hatch.ret};
+  saved={L,TH,grid,gems,enemies,pickups,car,terr,anoms,wx:{...wx},bo:{...bo},ret:L.hatch.ret};
   buildLevel(SUB);
   $("lvlNum").textContent="Таємний прохід";
   banner=SUB.name;bannerT=2.2;
 }
 function exitSub(){
   const s=saved;saved=null;
-  L=s.L;TH=s.TH;grid=s.grid;gems=s.gems;enemies=s.enemies;pickups=s.pickups;car=s.car;terr=s.terr;
+  L=s.L;TH=s.TH;grid=s.grid;gems=s.gems;enemies=s.enemies;pickups=s.pickups;car=s.car;terr=s.terr;anoms=s.anoms;
+  Object.assign(wx,s.wx);Object.assign(bo,s.bo);if(bo.phase!=="none"){bo.phase="none";bo.next=time+60;}
   bullets=[];grenades=[];booms=[];particles=[];texts=[];bolts=[];quiet={};
   cpCol=s.ret;spawn();
   $("lvlNum").textContent=`Локація ${lvlIdx+1} з ${LEVELS.length}`;$("lvlName").textContent=L.name;
@@ -764,6 +781,65 @@ function explode(n){
     if(d<R)hurtP(CFG.dmg.explosion*(1-d/R),{force:true,from:n.x});}
   SFX.boom();
   burst(n.x,n.y,"#ffb04a",18,1.2);burst(n.x,n.y,"#6b6b62",12,.6);
+}
+// ---------- blowout ----------
+const inShelter=()=>{
+  if(L.sub)return true;
+  if(driving())return false;
+  const cx=p.x+p.w/2;return (L.shelters||[]).some(([c,w])=>cx>c*T+2&&cx<(c+w)*T-2);
+};
+function nearestShelter(){
+  let best=null;for(const [c,w] of L.shelters||[]){const x=(c+w/2)*T, d=Math.abs(x-(p.x+p.w/2));if(!best||d<best.d)best={x,d};}
+  return best;
+}
+function blowoutUpdate(){
+  const B=CFG.blowout;
+  if(bo.phase==="none"){
+    if(time<bo.next)return false;
+    // only start when the stalker can actually make it to cover
+    const sh=nearestShelter();
+    if(!sh||sh.d>B.maxShelterDist||L.sub){bo.next=time+20;return false;}
+    bo.phase="warn";bo.t=B.warn;pda("Наближається викид! Негайно знайди укриття.",true,7);
+    return false;
+  }
+  bo.t-=dt;
+  if(bo.phase==="warn"){
+    if(bo.t<=0){bo.phase="active";bo.t=B.active;shake=.4;pda(inShelter()?"Викид! Не виходь з укриття.":"Викид! Ти не в укритті!",true,4);}
+    return false;
+  }
+  // active
+  shake=Math.max(shake,.08);
+  if(Math.random()<dt*1.5){wx.flash=.8;wx.boltX=Math.random();SFX.thunder(.2);}
+  if(!inShelter()){
+    st.rad=Math.min(100,st.rad+B.rad*dt);fx.hit=Math.max(fx.hit,.15);
+    if(drain(B.dps*dt))return true;
+  }
+  if(bo.t<=0){
+    bo.phase="none";bo.next=time+B.again[0]+Math.random()*(B.again[1]-B.again[0]);
+    // the Zone pays back: fresh artifacts next to the anomalies
+    const spots=anoms.filter(a=>a.t!=="V"||true);let n=0;
+    for(let i=0;i<B.artifacts&&spots.length;i++){
+      const a=spots[Math.floor(Math.random()*spots.length)], x=a.cx+(Math.random()<.5?-1:1)*(T*1.2+Math.random()*T);
+      const y=Math.min(surf(x),BASE);if(!isFinite(y))continue;
+      const k=Math.floor(Math.random()*ART_COLORS.length);
+      gems.push({x,y:y-34,taken:false,k,col:ART_COLORS[k],ph:Math.random()*9,fresh:true});n++;
+    }
+    pda(n?`Викид завершено. Біля аномалій з'явилися нові артефакти (${n}).`:"Викид завершено.",false,6);
+  }
+  return false;
+}
+let ambT=3;
+function ambience(){
+  SFX.ambient(L.sub?.3:1,wx.rain,bo.phase==="warn"?1:0);
+  ambT-=dt;
+  if(ambT<=0){
+    ambT=8+Math.random()*14;
+    const r=Math.random();
+    if(r<.35)SFX.creak();else if(r<.65&&!L.sub)SFX.distantShots();else SFX.howl();
+  }
+  // storms: lightning, thunder a moment later
+  if(wx.storm&&time>wx.nextBolt){wx.nextBolt=time+6+Math.random()*10;wx.flash=1;wx.boltX=.15+Math.random()*.7;SFX.thunder(.5+Math.random()*.3);}
+  wx.flash=Math.max(0,wx.flash-dt*2.5);
 }
 function radAt(x){let s=0;for(const [c,w,k] of L.rad||[])if(x>=c*T&&x<(c+w)*T)s=Math.max(s,k);return s;}
 let tickT=0;
@@ -1030,6 +1106,26 @@ const SFX=(()=>{
     boom(){noise(1.1,.95,"lowpass",900,60,.7);tone(.5,.6,"sine",70,28);},
     throw(){noise(.12,.12,"bandpass",1200,2400,2);},
     pickup(){tone(.08,.15,"triangle",660,990);tone(.1,.12,"triangle",990,1320,.07);},
+    pda(){tone(.05,.1,"square",1500,1500);tone(.05,.1,"square",1900,1900,.08);},
+    thunder(v=.6){noise(2.2,v,"lowpass",420,40,.7,.15);noise(.4,v*.6,"lowpass",900,200,.8);},
+    creak(){tone(1.4,.06,"sawtooth",190+Math.random()*80,120+Math.random()*60);},
+    howl(){const f=300+Math.random()*120;tone(1.6,.07,"sine",f,f*1.6);tone(1.2,.05,"sine",f*1.6,f*.9,1.2);},
+    distantShots(){const n=2+Math.floor(Math.random()*4);for(let i=0;i<n;i++)noise(.08,.07,"bandpass",1200,600,1,i*(.1+Math.random()*.12));},
+    // continuous beds: wind, rain, blowout siren
+    ambient(wind,rain,siren){
+      if(!ac)return;
+      if(!api.bed){
+        const mk=(type,f,q)=>{const s=ac.createBufferSource();s.buffer=noiseBuf;s.loop=true;const fl=ac.createBiquadFilter();fl.type=type;fl.frequency.value=f;fl.Q.value=q;const g=ac.createGain();g.gain.value=0;s.connect(fl);fl.connect(g);g.connect(master);s.start();return {g,fl};};
+        const o=ac.createOscillator();o.type="sawtooth";o.frequency.value=420;const og=ac.createGain();og.gain.value=0;
+        const lfo=ac.createOscillator();lfo.frequency.value=.35;const lg=ac.createGain();lg.gain.value=180;lfo.connect(lg);lg.connect(o.frequency);
+        const sf=ac.createBiquadFilter();sf.type="lowpass";sf.frequency.value=1400;o.connect(sf);sf.connect(og);og.connect(master);o.start();lfo.start();
+        api.bed={wind:mk("lowpass",380,.6),rain:mk("highpass",1400,.4),siren:og};
+      }
+      const t=ac.currentTime, b=api.bed;
+      b.wind.g.gain.setTargetAtTime(wind*(.07+.04*Math.sin(t*.3)),t,.5);b.wind.fl.frequency.setTargetAtTime(300+180*Math.sin(t*.17),t,.5);
+      b.rain.g.gain.setTargetAtTime(rain*.09,t,.6);
+      b.siren.gain.setTargetAtTime(siren*.06,t,.3);
+    },
     tick(chirp){if(chirp)tone(.03,.07,"sine",2400,2200);else noise(.012,.18,"highpass",4000,4000,1);},
     growl(t){
       if(t==="dog")noise(.25,.25,"bandpass",500,300,3);
@@ -1133,7 +1229,7 @@ function update(){
   // checkpoints
   for(const c of L.cps) if(c>cpCol&&p.x>c*T){cpCol=c;burst(c*T+16,topAt(c*T+16,2)-32,"#7fe08a",12,.6);texts.push({x:c*T+16,y:topAt(c*T+16,2)-50,s:"Збережено",life:1.2});saveGame();saveT=0;}
   saveT+=dt;
-  if(saveT>CFG.autosave&&body().onGround&&p.inv<=0&&!enemies.some(e=>e.alive&&Math.abs(e.x-p.x)<160)){saveT=0;saveGame();}
+  if(saveT>CFG.autosave&&bo.phase==="none"&&body().onGround&&p.inv<=0&&!enemies.some(e=>e.alive&&Math.abs(e.x-p.x)<160)){saveT=0;saveGame();}
   fx.hit=Math.max(0,fx.hit-dt);
 
   // shooting
@@ -1219,6 +1315,9 @@ function update(){
   const bd=body();
   if(anomalies())return;
   if(statusEffects())return;
+  if(blowoutUpdate())return;
+  ambience();
+  if(pdaT>0){pdaT-=dt;if(pdaT<=0)$("pda").hidden=true;}
   if(L.hatch&&!driving()&&tile(Math.floor((p.x+p.w/2)/T),10)==="H"&&p.y>10*T+6){enterSub();return;}
   if(L.sub&&p.y+p.h>10*T+6){burst(p.x+p.w/2,10*T,"#8fd14a",12);fellOff(CFG.dmg.acid);return;}
   if(p.y>VIEW_H+60){fellOff(CFG.dmg.fall);return;}
@@ -1649,16 +1748,114 @@ function drawRamps(x0,x1){
   }
 }
 
+// ---------- weather & atmosphere ----------
+const rain=Array.from({length:150},(_,i)=>({x:rnd(i+300)*1400,y:rnd(i+700)*VIEW_H,s:.7+rnd(i+11)*.6}));
+let lightCv=null, lctx=null;
+function skyFx(){
+  if(L.sub)return;
+  const B=bo.phase==="active"?1:bo.phase==="warn"?1-bo.t/CFG.blowout.warn:0;
+  if(wx.night){ctx.fillStyle=`rgba(6,10,26,${.55*wx.night})`;ctx.fillRect(0,0,viewW,VIEW_H);}
+  if(B){ctx.fillStyle=`rgba(150,40,20,${.45*B+(bo.phase==="active"?.12*Math.sin(time*7):0)})`;ctx.fillRect(0,0,viewW,VIEW_H);}
+  // moon (brighter at night), stars at night
+  const mx=viewW*.72, my=70;
+  if(wx.night){
+    ctx.fillStyle="rgba(220,230,255,.6)";for(let i=0;i<40;i++){const sx=rnd(i+50)*viewW, sy=rnd(i+90)*VIEW_H*.5;if((time*2+i)%7>.3)ctx.fillRect(sx,sy,1.2,1.2);}
+    const mg=ctx.createRadialGradient(mx,my,10,mx,my,90);mg.addColorStop(0,"rgba(200,215,255,.22)");mg.addColorStop(1,"rgba(200,215,255,0)");ctx.fillStyle=mg;ctx.fillRect(mx-90,my-90,180,180);
+  }
+  ctx.fillStyle=wx.night?"rgba(225,232,255,.75)":B?"rgba(255,150,90,.5)":"rgba(232,226,180,.3)";ctx.beginPath();ctx.arc(mx,my,26,0,7);ctx.fill();
+  if(wx.flash>0){
+    ctx.fillStyle=`rgba(230,235,255,${wx.flash*.45})`;ctx.fillRect(0,0,viewW,VIEW_H);
+    if(wx.flash>.5){const bx=wx.boltX*viewW;let x=bx,y=0;ctx.strokeStyle=`rgba(240,245,255,${wx.flash})`;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y);
+      for(let i=0;i<9;i++){x+=(rnd(i+Math.floor(wx.boltX*999))-.5)*40;y+=26;ctx.lineTo(x,y);}ctx.stroke();}
+  }
+}
+function fogBand(y,h,a,par){
+  const g=ctx.createLinearGradient(0,y,0,y+h);g.addColorStop(0,"rgba(200,205,190,0)");g.addColorStop(.6,`rgba(200,205,190,${a*.6})`);g.addColorStop(1,`rgba(200,205,190,${a*.35})`);
+  ctx.fillStyle=g;ctx.fillRect(0,y,viewW,h);
+  // drifting wisps
+  for(let i=0;i<3;i++){const P=viewW+400, x=((i*260-camX*par+time*(8+i*3))%P+P)%P-200;
+    ctx.fillStyle=`rgba(210,215,200,${a*.25})`;ctx.beginPath();ctx.ellipse(x,y+h*.55+Math.sin(time*.3+i)*6,160,h*.22,0,0,7);ctx.fill();}
+}
+function drawRain(){
+  ctx.strokeStyle=`rgba(190,205,220,${.25+.3*wx.rain})`;ctx.lineWidth=1;ctx.beginPath();
+  const n=Math.floor(rain.length*wx.rain), W=viewW+40;
+  for(let i=0;i<n;i++){const d=rain[i], x=((d.x-camX*.9-time*120*d.s)%W+W)%W-20, y=(d.y+time*620*d.s)%VIEW_H;
+    ctx.moveTo(x,y);ctx.lineTo(x-4*d.s,y+12*d.s);}
+  ctx.stroke();
+}
+// night: darkness everywhere except around the stalker, his flashlight, headlights and glowing anomalies
+function drawNight(){
+  if(!lightCv){lightCv=document.createElement("canvas");lctx=lightCv.getContext("2d");}
+  // the light mask is soft, so a third of the resolution is plenty (and much cheaper on phones)
+  const LS=3, lw=Math.ceil(cv.width/LS), lh=Math.ceil(cv.height/LS);
+  if(lightCv.width!==lw||lightCv.height!==lh){lightCv.width=lw;lightCv.height=lh;}
+  const l=lctx;l.setTransform(dpr*scale/LS,0,0,dpr*scale/LS,0,0);
+  l.globalCompositeOperation="source-over";l.clearRect(0,0,viewW,VIEW_H);
+  l.fillStyle=`rgba(4,6,16,${.72*wx.night})`;l.fillRect(0,0,viewW,VIEW_H);
+  l.globalCompositeOperation="destination-out";
+  const hole=(x,y,r,a=1)=>{const g=l.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,`rgba(0,0,0,${a})`);g.addColorStop(1,"rgba(0,0,0,0)");l.fillStyle=g;l.fillRect(x-r,y-r,r*2,r*2);};
+  const sx=x=>x-camX, bd=body();
+  hole(sx(bd.x+bd.w/2),bd.y+bd.h/2,driving()?110:85,.9);
+  const cone=(x,y,dir,len,spread,a)=>{const g=l.createRadialGradient(x,y,4,x,y,len);g.addColorStop(0,`rgba(0,0,0,${a})`);g.addColorStop(1,"rgba(0,0,0,0)");
+    l.fillStyle=g;l.beginPath();l.moveTo(x,y);l.lineTo(x+dir*len,y-len*spread);l.lineTo(x+dir*len,y+len*spread);l.closePath();l.fill();};
+  if(driving())cone(sx(car.x+car.w/2+car.face*30),car.y+car.h-16,car.face,300,.22,.95);
+  else if(settings.light!==false)cone(sx(p.x+p.w/2+p.face*8),p.y+12,p.face,270,.3,.9);
+  for(const a of anoms){const x=sx(a.cx);if(x<-60||x>viewW+60)continue;
+    if(a.t==="^"&&anomOn(a))hole(x,(a.r+1)*T-8,55,.7);if(a.t==="F")hole(x,(a.r+1)*T-20,anomOn(a)?90:30,.75);}
+  for(const g of gems){if(!g.taken){const x=sx(g.x);if(x>-20&&x<viewW+20)hole(x,g.y,26,.6);}}
+  for(const c of L.cps)if(cpCol>=c)hole(sx(c*T+16),topAt(c*T+16,2)-36,40,.6);
+  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(lightCv,0,0,cv.width,cv.height);ctx.restore();
+  ctx.setTransform(dpr*scale,0,0,dpr*scale,0,0);
+}
+function drawBlowout(){
+  const warn=bo.phase==="warn";
+  if(!warn){ctx.fillStyle=`rgba(200,60,30,${.12+.1*Math.sin(time*9)})`;ctx.fillRect(0,0,viewW,VIEW_H);}
+  // arrow to the nearest shelter
+  const sh=nearestShelter();if(!sh)return;
+  ctx.font="800 13px Nunito, system-ui, sans-serif";ctx.textAlign="center";
+  const t=warn?`Викид через ${Math.ceil(bo.t)} с`:"ВИКИД";
+  ctx.fillStyle="rgba(0,0,0,.55)";ctx.fillText(t,viewW/2+1,VIEW_H-17);ctx.fillStyle="#ffb09a";ctx.fillText(t,viewW/2,VIEW_H-18);
+  if(inShelter()){ctx.fillStyle="#7fe08a";ctx.fillText("Ти в укритті",viewW/2,VIEW_H-36);return;}
+  const dx=sh.x-(p.x+p.w/2), m=Math.round(Math.abs(dx)/T), dir=Math.sign(dx)||1, ax=dir>0?viewW-26:26, ay=VIEW_H/2;
+  ctx.fillStyle="#7fe08a";ctx.beginPath();ctx.moveTo(ax+dir*12,ay);ctx.lineTo(ax-dir*6,ay-11);ctx.lineTo(ax-dir*6,ay+11);ctx.closePath();ctx.fill();
+  ctx.fillText(`укриття ${m} м`,ax-dir*30,ay+28);
+}
+// near-background props: wrecked cars, rusty tanks and towers, warning signs
+function decoLayer(){
+  const base=VIEW_H-48, P=980;
+  const off=-(camX*.7)%P;
+  for(let k=-1;k<viewW/P+1;k++){
+    const bx=off+k*P, seed=Math.floor((camX*.7+bx)/P);
+    ctx.fillStyle="rgba(40,36,30,.85)";
+    // rusted car wreck
+    const cx=bx+120;ctx.fillStyle="#4a3426";rr(cx,base-18,64,14,3);ctx.fill();ctx.fillStyle="#3a2a1f";ctx.beginPath();ctx.moveTo(cx+14,base-18);ctx.lineTo(cx+22,base-30);ctx.lineTo(cx+44,base-30);ctx.lineTo(cx+52,base-18);ctx.fill();
+    ctx.fillStyle="#1d1a16";ctx.beginPath();ctx.arc(cx+14,base-3,6,0,7);ctx.arc(cx+50,base-3,6,0,7);ctx.fill();
+    ctx.fillStyle="rgba(130,70,40,.6)";ctx.fillRect(cx+6,base-14,8,4);ctx.fillRect(cx+36,base-12,10,3);
+    // rusty water tower / tank
+    const tx=bx+470;ctx.strokeStyle="#4a3a2c";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(tx-16,base);ctx.lineTo(tx-10,base-60);ctx.moveTo(tx+16,base);ctx.lineTo(tx+10,base-60);ctx.moveTo(tx-14,base-20);ctx.lineTo(tx+14,base-40);ctx.stroke();
+    ctx.fillStyle="#5a4030";rr(tx-20,base-88,40,30,6);ctx.fill();ctx.fillStyle="rgba(150,80,40,.5)";ctx.fillRect(tx-14,base-80,10,14);
+    // warning sign
+    const sx=bx+760;ctx.fillStyle="#3a3c34";ctx.fillRect(sx-1.5,base-36,3,36);
+    ctx.fillStyle="#b89a30";ctx.beginPath();ctx.moveTo(sx,base-52);ctx.lineTo(sx+11,base-33);ctx.lineTo(sx-11,base-33);ctx.closePath();ctx.fill();
+    trefoil(sx,base-39,5,"#2a2410","#b89a30");
+    if(seed%2===0){// broken fence
+      ctx.strokeStyle="#3a3a30";ctx.lineWidth=2;for(let i=0;i<6;i++){ctx.beginPath();ctx.moveTo(bx+600+i*14,base);ctx.lineTo(bx+600+i*14+(i===2?5:0),base-22+(i%2)*3);ctx.stroke();}
+      ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(bx+600,base-16);ctx.lineTo(bx+670,base-12);ctx.stroke();}
+  }
+}
+
 // ---------- draw ----------
 function draw(){
   ctx.setTransform(dpr*scale,0,0,dpr*scale,0,0);
   const g=ctx.createLinearGradient(0,0,0,VIEW_H);
   g.addColorStop(0,TH.sky[0]);g.addColorStop(.55,TH.sky[1]);g.addColorStop(1,TH.sky[2]);
   ctx.fillStyle=g;ctx.fillRect(0,0,viewW,VIEW_H);
-  ctx.fillStyle="rgba(232,226,180,.3)";ctx.beginPath();ctx.arc(viewW*.72,70,26,0,7);ctx.fill();
+  skyFx();
   farLayer();
   if(!L.sub){ctx.fillStyle="rgba(122,125,90,.3)";ctx.fillRect(0,VIEW_H-140,viewW,140);}
+  if(wx.fog&&!L.sub)fogBand(VIEW_H-170,120,wx.fog*.55,.08);
   midLayer();
+  if(!L.sub)decoLayer();
 
   const sk=shake>0?shake/.3:0, ps=Math.min(1,fx.psi||0);
   ctx.save();ctx.translate(-Math.round(camX)+(Math.random()-.5)*10*sk+Math.sin(time*9)*6*ps,(Math.random()-.5)*8*sk+Math.cos(time*7)*4*ps);
@@ -1759,6 +1956,17 @@ function draw(){
         ctx.stroke();
       }
     }
+  }
+  // shelters: concrete bunkers with a painted sign
+  for(const [c,w] of L.shelters||[]){
+    const x0=c*T-6, x1=(c+w)*T+6;if(x1<camX-40||x0>camX+viewW+40)continue;
+    const gy=Math.min(topAt(x0+8,2),topAt(x1-8,2)), H=74, safe=bo.phase!=="none";
+    ctx.fillStyle="#56584f";ctx.fillRect(x0,gy-H,x1-x0,H);
+    ctx.fillStyle="#6a6c62";ctx.fillRect(x0-4,gy-H-6,x1-x0+8,8);
+    ctx.fillStyle="rgba(0,0,0,.18)";for(let y=gy-H+14;y<gy;y+=16)ctx.fillRect(x0,y,x1-x0,1.5);
+    ctx.fillStyle="#141512";ctx.fillRect(x0+(x1-x0)/2-14,gy-44,28,44);
+    ctx.fillStyle=safe?"#7fe08a":"#e5c33a";ctx.font="bold 9px system-ui, sans-serif";ctx.textAlign="center";ctx.fillText("УКРИТТЯ",(x0+x1)/2,gy-H+11);
+    if(safe){ctx.fillStyle=`rgba(127,224,138,${.35+.25*Math.sin(time*6)})`;ctx.fillRect(x0+(x1-x0)/2-14,gy-46,28,3);}
   }
   // radiation zones: sign post + a sickly haze
   for(const [c,w,k] of L.rad||[]){
@@ -1865,6 +2073,10 @@ function draw(){
   for(const s of texts){ctx.globalAlpha=Math.min(1,s.life*2);ctx.fillStyle="#1b1e18";ctx.fillText(s.s,s.x+1,s.y+1);ctx.fillStyle=s.col||"#e8f0b0";ctx.fillText(s.s,s.x,s.y);}
   ctx.globalAlpha=1;
   ctx.restore();
+  if(wx.fog&&!L.sub)fogBand(VIEW_H-90,90,wx.fog*.7,.25);
+  if(wx.rain&&!L.sub)drawRain();
+  if(wx.night&&!L.sub)drawNight();
+  if(bo.phase!=="none")drawBlowout();
   ctx.fillStyle=L.sub?"rgba(140,200,180,.35)":"rgba(220,215,190,.55)";
   for(const a of ash){
     const x=((a.x+Math.sin(time*.8+a.s)*12-camX*.3)%(viewW+20)+viewW+20)%(viewW+20)-10;
@@ -1906,6 +2118,7 @@ if(readSave()){$("ovBtn").textContent="Продовжити";ovAction=loadGame;$
 // leaving the tab pauses the game and keeps progress
 document.addEventListener("visibilitychange",()=>{
   if(document.hidden&&running){saveGame();overlay("Пауза","Гру призупинено.","Продовжити",null);}
+  if(SFX.ctx){if(document.hidden)SFX.ctx.suspend();else SFX.ctx.resume();}
 });
 addEventListener("pagehide",()=>{if(running)saveGame();});
 requestAnimationFrame(frame);
