@@ -19,7 +19,7 @@
   --body:"Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: dark;
 }
-html,body{height:100%}
+html,body{height:100%;overscroll-behavior:none}
 body{background:var(--ground);color:var(--text);font-family:var(--body);overflow:hidden;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #app{height:100%;display:grid;grid-template-rows:auto 1fr auto auto;gap:10px;
@@ -31,7 +31,12 @@ body{background:var(--ground);color:var(--text);font-family:var(--body);overflow
 .stat{display:flex;align-items:center;gap:6px}
 .art-ico{width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 40% 40%,#fff 0 20%,var(--glow) 45%,#3d8f80 100%);box-shadow:0 0 9px var(--glow)}
 .pig-ico{font-size:13px;color:var(--muted)}
-.hearts{color:var(--blood);letter-spacing:2px;font-size:16px}
+.hpstat{gap:7px}
+.hpbar{width:92px;height:10px;border-radius:5px;background:var(--line);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(0,0,0,.35)}
+.hpbar i{display:block;height:100%;width:100%;background:#7fd36a;transition:width .15s,background-color .3s}
+.hudbtn{font:800 13px var(--body);color:#ffd9d4;background:#3a1d18;border:1px solid var(--blood);border-radius:8px;padding:4px 9px;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:pointer;font-variant-numeric:tabular-nums}
+.hudbtn:disabled{opacity:.45}
 .stage{position:relative;min-height:0;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--stage)}
 canvas{display:block;width:100%;height:100%;touch-action:none}
 .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -42,6 +47,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .card p{margin:0;color:var(--muted);line-height:1.45;font-size:14px}
 .card .big{font-family:var(--display);font-size:19px;color:var(--text)}
 .btn{font:800 16px var(--body);color:#1d1a08;background:var(--rad);border:0;border-radius:10px;padding:13px 18px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
 .btn:focus-visible,.pad button:focus-visible{outline:3px solid var(--text);outline-offset:2px}
 .pad{display:none;justify-content:space-between;align-items:center;gap:10px;padding-bottom:4px}
 .pad .grp{display:flex;gap:8px}
@@ -76,11 +82,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
   <div class="hud">
     <div class="lvl"><small id="lvlNum">Локація 1 з 6</small><span id="lvlName">Залісся</span></div>
     <div class="stats">
+      <div class="stat hpstat" title="Здоров'я"><span class="hpbar"><i id="hpBar"></i></span><span id="hpNum">100</span></div>
+      <button class="hudbtn" id="bMed" title="Аптечка (H)" aria-label="Використати аптечку">✚ <span id="medN">2</span></button>
       <div class="stat" title="Артефакти"><span class="art-ico" aria-hidden="true"></span><span id="gems">0</span></div>
       <div class="stat" title="Знищено ворогів"><span class="pig-ico" aria-hidden="true">✕</span><span id="kills">0</span></div>
       <div class="stat" title="Гранати"><span class="nade-ico" aria-hidden="true"></span><span id="nades">1</span></div>
       <div class="stat" id="carStat" title="Стан УАЗа" hidden><span class="car-ico">УАЗ</span><span class="carbar"><i id="carBar"></i></span></div>
-      <div class="stat hearts" id="lives" aria-label="Життя">♥♥♥♥♥</div>
     </div>
   </div>
   <div class="stage">
@@ -88,8 +95,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
     <div class="overlay" id="ov">
       <div class="card">
         <h1 id="ovTitle">Зона відчуження</h1>
-        <p id="ovText">Шість локацій від Залісся до ЧАЕС. Збирай артефакти, обходь аномалії, відстрілюй мутантів і ворожих сталкерів. З полеглих сталкерів падають гранати, а в Прип'яті є відкритий люк. Кинь болт в аномалію, і вона згасне на 5 секунд. Зелені ліхтарі — контрольні точки. На кожній локації чекає старий УАЗ: сідай і тарань мутантів та сталкерів, а ями перелітай з трамплінів на швидкості. Стеж за станом машини.</p>
+        <p id="ovText">Шість локацій від Залісся до ЧАЕС. Збирай артефакти, обходь аномалії, відстрілюй мутантів і ворожих сталкерів. З полеглих сталкерів падають гранати, а в Прип'яті є відкритий люк. Кинь болт в аномалію, і вона згасне на 5 секунд. Зелені ліхтарі — контрольні точки, а гра зберігається сама. На кожній локації чекає старий УАЗ: сідай і тарань мутантів та сталкерів, а ями перелітай з трамплінів на швидкості. Стеж за станом машини.</p>
         <button class="btn" id="ovBtn">Увійти в Зону</button>
+        <button class="btn ghost" id="ovBtn2" hidden></button>
       </div>
     </div>
   </div>
@@ -112,6 +120,18 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 <script>
 (()=>{
 const T=32, ROWS=12, VIEW_H=ROWS*T;
+// ---------- balance: every tunable number lives here ----------
+const CFG={
+  player:{maxHp:100, invuln:.6, knockX:230, knockY:260},
+  // damage dealt to the stalker, HP
+  dmg:{dog:12, boar:25, big:35, snork:20, bloodsucker:30, controller:15, stalker:10, bandit:15, rat:6, crow:8,
+       electra:30, explosion:40, fall:35, acid:35},
+  heal:{medkit:40},
+  autosave:15,
+  difficulty:{easy:{name:"Новачок",dmg:.6}, normal:{name:"Сталкер",dmg:1}, hard:{name:"Ветеран",dmg:1.4}}
+};
+const freshSt=()=>({hp:CFG.player.maxHp, items:{medkit:2, grenade:1}});
+const clone=o=>JSON.parse(JSON.stringify(o));
 const ART_COLORS=["#8fe0d0","#f2a640","#c78bff","#7fd36a","#ff6f61"];
 const ETYPES={
   boar:{w:30,h:22,hp:2,speed:55},
@@ -134,33 +154,33 @@ const THEMES={
 // Ground is a height map: hills are [col, widthCols, heightPx]; pits get an automatic ramp in front of them,
 // wagons ("W") get one on their left side so the UAZ can drive up.
 const LEVELS=[
- {name:"Залісся", theme:"village", w:66, gaps:[[16,3],[29,3],[45,3]],
+ {name:"Залісся", items:[[13,"medkit"]], theme:"village", w:66, gaps:[[16,3],[29,3],[45,3]],
   hills:[[8,4,36],[20,5,44],[32,4,30],[51,6,60]],
   blocks:[["^",37,9,2]],
   gems:[[6,8],[8,7],[17,7],[18,7],[22,6],[23,6],[30,7],[34,6],[38,6],[46,7],[53,6],[54,6],[60,8]],
   enemies:[[22,9,"dog"],[34,9,"boar"],[58,9,"stalker"],[27,4,"crow"]], start:2, cps:[33], flag:63, car:5},
- {name:"Рудий ліс", theme:"forest", w:80, gaps:[[12,3],[22,3],[33,4],[50,3],[64,3]],
+ {name:"Рудий ліс", items:[[30,"medkit"],[60,"medkit"]], theme:"forest", w:80, gaps:[[12,3],[22,3],[33,4],[50,3],[64,3]],
   hills:[[5,3,40],[15,3,30],[25,4,40],[53,6,72]],
   blocks:[["^",42,9,2],["^",68,9,2]],
   gems:[[6,7],[13,7],[16,7],[19,7],[23,7],[26,6],[28,6],[34,7],[35,7],[40,7],[45,7],[51,7],[56,5],[65,7],[72,8]],
   enemies:[[18,9,"boar"],[28,9,"dog"],[40,9,"stalker"],[71,9,"stalker"],[75,9,"dog"],[20,4,"crow"],[47,3,"crow"]], start:2, cps:[39], flag:77, car:2},
- {name:"Прип'ять", theme:"town", w:90, gaps:[[10,3],[20,3],[30,4],[45,3],[56,4],[72,3]],
+ {name:"Прип'ять", items:[[27,"medkit"],[70,"medkit"]], theme:"town", w:90, gaps:[[10,3],[20,3],[30,4],[45,3],[56,4],[72,3]],
   hills:[[23,3,36],[60,3,30],[79,4,60]],
   blocks:[["^",14,9,2],["^",37,9,2],["^",65,9,2]],
   gems:[[11,7],[15,7],[21,7],[24,6],[25,6],[31,7],[32,7],[39,7],[43,7],[46,7],[57,7],[58,7],[61,6],[67,7],[73,7],[80,6],[81,6]],
   enemies:[[17,9,"dog"],[25,9,"stalker"],[39,9,"boar"],[50,9,"stalker"],[76,9,"dog"],[84,9,"big"],[34,4,"crow"],[60,4,"crow"]], start:2, cps:[49], flag:88, hatch:{col:63,ret:77}, car:3},
- {name:"Станція Янів", theme:"rail", w:100, gaps:[[14,3],[31,3],[42,4],[64,3],[72,3],[89,3]],
+ {name:"Станція Янів", items:[[37,"medkit"],[60,"medkit"]], theme:"rail", w:100, gaps:[[14,3],[31,3],[42,4],[64,3],[72,3],[89,3]],
   blocks:[["W",21,8,6],["W",21,9,6],["W",52,8,5],["W",52,9,5],["^",58,9,2],["W",79,8,4],["W",79,9,4],["^",83,9,2]],
   gems:[[10,7],[15,7],[22,6],[25,6],[32,7],[36,7],[43,6],[44,7],[53,6],[55,6],[65,7],[68,7],[73,7],[80,6],[86,7],[90,7],[94,8]],
   enemies:[[12,9,"dog"],[23,7,"stalker"],[35,9,"stalker"],[47,9,"boar"],[54,7,"dog"],[67,9,"stalker"],[93,9,"stalker"],[95,9,"dog"],[33,4,"crow"],[66,4,"crow"]],
   start:2, cps:[46], flag:97, car:4},
- {name:"Радар «Дуга»", theme:"duga", w:105, gaps:[[12,3],[22,4],[36,3],[46,4],[62,3],[74,4],[90,3]],
+ {name:"Радар «Дуга»", items:[[41,"medkit"],[70,"medkit"]], theme:"duga", w:105, gaps:[[12,3],[22,4],[36,3],[46,4],[62,3],[74,4],[90,3]],
   hills:[[27,4,40],[51,5,56],[78,4,48]],
   blocks:[["^",66,9,2],["^",83,9,2],["^",96,9,2]],
   gems:[[9,8],[13,7],[16,7],[18,7],[23,7],[24,7],[25,7],[28,6],[30,6],[37,7],[40,7],[44,7],[47,7],[48,7],[53,5],[57,7],[63,7],[67,7],[70,7],[75,7],[76,7],[79,6],[85,7],[91,7],[97,7],[99,7]],
   enemies:[[8,9,"dog"],[18,9,"stalker"],[32,9,"boar"],[40,9,"stalker"],[43,9,"stalker"],[55,9,"dog"],[70,9,"stalker"],[68,9,"stalker"],[86,9,"boar"],[94,9,"stalker"],[16,4,"crow"],[50,3,"crow"],[78,3,"crow"]],
   start:2, cps:[54], flag:102, car:4},
- {name:"ЧАЕС", theme:"npp", w:115, gaps:[[10,3],[20,3],[30,4],[47,3],[58,4],[76,3],[86,4],[100,3]],
+ {name:"ЧАЕС", items:[[35,"medkit"],[62,"medkit"],[97,"medkit"]], theme:"npp", w:115, gaps:[[10,3],[20,3],[30,4],[47,3],[58,4],[76,3],[86,4],[100,3]],
   hills:[[23,3,40],[50,4,36],[63,3,30],[79,3,50],[104,3,56]],
   blocks:[["^",14,9,2],["^",38,9,2],["^",68,9,2],["^",93,9,2]],
   gems:[[11,7],[15,6],[21,7],[24,6],[25,6],[31,7],[32,7],[35,7],[41,7],[44,7],[48,7],[52,6],[59,7],[60,7],[64,6],[70,7],[72,7],[77,7],[80,6],[87,7],[96,7],[101,7],[105,6]],
@@ -188,7 +208,7 @@ window.addEventListener("resize",resize);
 const rnd=n=>{const s=Math.sin(n*12.9898+78.233)*43758.5453;return s-Math.floor(s);};
 
 // ---------- state ----------
-let L, TH, grid, gems, enemies, bullets, ebullets, particles, p, camX=0, lvlIdx=0, lives=5, gemTotal=0, kills=0, running=false, time=0, cpCol=2, nades=1, grenades=[], pickups=[], booms=[], texts=[], shake=0, gReq=false, banner="", bannerT=0, saved=null, bolts=[], bReq=false, boltCd=0, quiet={}, car=null, cReq=false;
+let L, TH, grid, gems, enemies, bullets, ebullets, particles, p, camX=0, lvlIdx=0, st=freshSt(), levelStart=null, fx={hit:0}, saveT=0, settings={diff:"normal"}, gemTotal=0, kills=0, running=false, time=0, cpCol=2, grenades=[], pickups=[], booms=[], texts=[], shake=0, gReq=false, banner="", bannerT=0, saved=null, bolts=[], bReq=false, boltCd=0, quiet={}, car=null, cReq=false;
 const CAR_MAX=100;
 // how hard a ram hurts the UAZ, by enemy type
 const RAM_COST={boar:10,big:22,dog:6,crow:2,stalker:8,rat:3};
@@ -223,7 +243,8 @@ function buildLevel(def){
     if(type==="crow"){e.ox=c*T;e.oy=r*T;e.t=k*1.7;}
     return e;
   });
-  bullets=[];particles=[];grenades=[];pickups=[];booms=[];texts=[];bolts=[];quiet={};cpCol=L.start;
+  pickups=(L.items||[]).map(([c,kind])=>({kind,n:1,x:c*T+11,y:topAt(c*T+16,2)-12,vy:0,map:L.name+":"+c}));pickedMap=[];
+  bullets=[];particles=[];grenades=[];booms=[];texts=[];bolts=[];quiet={};cpCol=L.start;
   car=L.car!=null?{x:L.car*T,y:topAt(L.car*T+32,2)-34,ang:0,w:64,h:34,vx:0,vy:0,onGround:false,coyote:0,face:1,wr:0,hp:CAR_MAX,hit:0,touch:0,zap:0,drive:false,wreck:false,smoke:0}:null;
   spawn();
   $("lvlName").textContent=L.name;
@@ -239,10 +260,13 @@ const carCol=hp=>hp>CAR_MAX*.5?"#7fd36a":hp>CAR_MAX*.25?"#e5c33a":"#d9493f";
 function hud(){
   $("gems").textContent=gemTotal;
   $("kills").textContent=kills;
-  $("nades").textContent=nades;
+  $("nades").textContent=st.items.grenade;
+  const hp=Math.max(0,Math.ceil(st.hp)), hf=st.hp/CFG.player.maxHp;
+  $("hpNum").textContent=hp;
+  $("hpBar").style.cssText=`width:${hf*100}%;background-color:${hf>.6?"#7fd36a":hf>.25?"#e5c33a":"#d9493f"}`;
+  $("medN").textContent=st.items.medkit;$("bMed").disabled=!st.items.medkit;
   $("carStat").hidden=!driving();
   if(car)$("carBar").style.cssText=`width:${car.hp/CAR_MAX*100}%;background:${carCol(car.hp)}`;
-  $("lives").textContent="♥".repeat(Math.max(lives,0))+"♡".repeat(Math.max(5-lives,0));
 }
 
 // ---------- tiles ----------
@@ -309,11 +333,12 @@ function moveY(o){
 
 // ---------- input ----------
 const keys={left:false,right:false,jump:false,fire:false,gren:false,bolt:false,car:false};
-const KMAP={ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",Space:"jump",ArrowUp:"jump",KeyW:"jump",KeyJ:"fire",KeyF:"fire",KeyX:"fire",KeyK:"fire",KeyG:"gren",KeyL:"gren",KeyB:"bolt",KeyQ:"bolt",KeyE:"car",KeyC:"car"};
+const KMAP={ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",Space:"jump",ArrowUp:"jump",KeyW:"jump",KeyJ:"fire",KeyF:"fire",KeyX:"fire",KeyK:"fire",KeyG:"gren",KeyL:"gren",KeyB:"bolt",KeyQ:"bolt",KeyE:"car",KeyC:"car",KeyH:"med"};
 addEventListener("keydown",e=>{const k=KMAP[e.code];if(!k)return;e.preventDefault();
   if(k==="gren"&&!e.repeat)gReq=true;
   if(k==="bolt"&&!e.repeat)bReq=true;
   if(k==="car"&&!e.repeat)cReq=true;
+  if(k==="med"&&!e.repeat&&running)useItem("medkit");
   if(k==="jump"&&!keys.jump&&p)p.buf=.12; keys[k]=true;
   if(k==="jump"&&!running&&!$("ov").hidden&&!e.repeat)$("ovBtn").click();});
 addEventListener("keyup",e=>{const k=KMAP[e.code];if(k)keys[k]=false;});
@@ -326,39 +351,117 @@ function bindBtn(id,k){
   b.addEventListener("contextmenu",e=>e.preventDefault());
 }
 bindBtn("bL","left");bindBtn("bR","right");bindBtn("bJ","jump");bindBtn("bF","fire");bindBtn("bG","gren");bindBtn("bB","bolt");bindBtn("bC","car");
+$("bMed").addEventListener("click",()=>{if(running)useItem("medkit");});
 
 // ---------- flow ----------
-let ovAction=null;
-function overlay(title,text,btn,action){
+let ovAction=null, ovAction2=null;
+function overlay(title,text,btn,action,btn2,action2){
   $("ovTitle").textContent=title;$("ovText").innerHTML=text;$("ovBtn").textContent=btn;
+  $("ovBtn2").hidden=!btn2;$("ovBtn2").textContent=btn2||"";ovAction2=action2||null;
   ovAction=action;$("ov").hidden=false;running=false;
   for(const k in keys)keys[k]=false;
   document.querySelectorAll(".pad button").forEach(b=>b.classList.remove("on"));
   setTimeout(()=>$("ovBtn").focus({preventScroll:true}),50);
 }
-$("ovBtn").addEventListener("click",()=>{$("ov").hidden=true;const a=ovAction;ovAction=null;if(a)a();running=true;last=performance.now();});
-function newGame(){lvlIdx=0;lives=5;gemTotal=0;kills=0;nades=1;saved=null;bannerT=0;build(0);}
+function closeOverlay(a){$("ov").hidden=true;ovAction=ovAction2=null;if(a)a();running=true;last=performance.now();}
+$("ovBtn").addEventListener("click",()=>closeOverlay(ovAction));
+$("ovBtn2").addEventListener("click",()=>closeOverlay(ovAction2));
+// a level is always entered through here, so "restart location" has a snapshot to go back to
+function enterLevel(i){
+  lvlIdx=i;saved=null;bannerT=0;
+  levelStart={st:clone(st),gemTotal,kills};
+  build(i);saveGame();
+}
+function newGame(){st=freshSt();gemTotal=0;kills=0;enterLevel(0);}
+function restartLevel(){st=clone(levelStart.st);gemTotal=levelStart.gemTotal;kills=levelStart.kills;enterLevel(lvlIdx);}
+
+// ---------- saves ----------
+const SAVE_KEY="zona.save.v2";
+function readSave(){try{const d=JSON.parse(localStorage.getItem(SAVE_KEY));return d&&d.v===2?d:null;}catch(_){return null;}}
+function saveGame(){
+  if(!L||L.sub||!levelStart||st.hp<=0)return;
+  const d={v:2,lvl:lvlIdx,cp:cpCol,st,gemTotal,kills,ls:levelStart,
+    taken:gems.flatMap((g,i)=>g.taken?[i]:[]),dead:enemies.flatMap((e,i)=>e.alive?[]:[i]),
+    picked:pickedMap,
+    car:car?{x:car.x,y:car.y,hp:car.hp,wreck:car.wreck}:"none"};
+  const b=body();
+  if(b.onGround&&isFinite(footSurf(b))){d.x=driving()?car.x+car.w+4:p.x;}
+  try{localStorage.setItem(SAVE_KEY,JSON.stringify(d));}catch(_){}
+}
+let pickedMap=[];
+function loadGame(){
+  const d=readSave();
+  if(!d||!(d.lvl>=0&&d.lvl<LEVELS.length)){newGame();return;}
+  try{
+    lvlIdx=d.lvl;saved=null;bannerT=0;
+    st=Object.assign(freshSt(),d.st);st.items=Object.assign(freshSt().items,d.st.items);
+    st.hp=Math.max(1,Math.min(CFG.player.maxHp,+st.hp||CFG.player.maxHp));
+    gemTotal=d.gemTotal|0;kills=d.kills|0;levelStart=d.ls||{st:clone(st),gemTotal,kills};
+    build(lvlIdx);
+    for(const i of d.taken||[])if(gems[i])gems[i].taken=true;
+    for(const i of d.dead||[])if(enemies[i]){enemies[i].alive=false;enemies[i].dead=9;}
+    pickedMap=(d.picked||[]).slice();
+    pickups=pickups.filter(k=>!pickedMap.includes(k.map));
+    if(d.car==="none")car=null;
+    else if(car&&d.car){car.x=+d.car.x||car.x;car.y=topAt(car.x+32,2)-car.h;car.hp=Math.max(0,+d.car.hp||0);car.wreck=!!d.car.wreck;}
+    if(L.cps.includes(d.cp)||d.cp===L.start)cpCol=d.cp;
+    spawn();
+    // only restore an exact position that is still standing on solid ground
+    if(isFinite(d.x)&&d.x>0&&d.x<L.w*T-T){const y=topAt(d.x+p.w/2,2);if(isFinite(y)&&isFinite(footSurf({x:d.x,w:p.w}))){p.x=d.x;p.y=y-p.h;camX=Math.max(0,Math.min(p.x-viewW*.42,L.w*T-viewW));}}
+    hud();
+  }catch(_){newGame();}
+}
+function die(){
+  hud();
+  const has=!!readSave();
+  overlay("Сталкер загинув",`Локація: <span class="big">${L.name}</span><br>Артефактів: ${gemTotal} · Знищено ворогів: ${kills}`,
+    has?"Завантажити збереження":"Почати локацію заново",has?loadGame:restartLevel,
+    has?"Почати локацію заново":null,has?restartLevel:null);
+}
+function useItem(id){
+  const it=st.items;
+  if(id==="medkit"){
+    if(!it.medkit){note("Немає аптечок");return;}
+    if(st.hp>=CFG.player.maxHp){note("Здоров'я повне");return;}
+    it.medkit--;st.hp=Math.min(CFG.player.maxHp,st.hp+CFG.heal.medkit);
+    burst(p.x+p.w/2,p.y+10,"#7fd36a",10,.5);note(`+${CFG.heal.medkit} HP`);
+  }
+  hud();
+}
+const note=s=>texts.push({x:p.x+p.w/2,y:p.y-8,s,life:1});
 function loadBest(){try{return +localStorage.getItem("zoneBest")||0}catch(_){return 0}}
 function saveBest(v){try{localStorage.setItem("zoneBest",String(v))}catch(_){}}
 
-function hurt(fell){
-  if(!fell&&p.inv>0)return false;
-  lives--;hud();burst(p.x+p.w/2,Math.min(p.y+p.h/2,VIEW_H-20),"#d9493f",14);
-  if(lives<=0){
-    overlay("Зона забрала тебе",`Локація: <span class="big">${L.name}</span><br>Артефактів: ${gemTotal} · Знищено ворогів: ${kills}`,"Ще раз",newGame);
-    return true;
-  }
-  spawn();return true;
+// Damages the stalker. Returns true when it killed him (callers then stop the frame).
+// from: x the hit came from (knockback), force: ignore the invulnerability window.
+function hurtP(n,o={}){
+  if(st.hp<=0)return true;
+  if(!o.force&&p.inv>0)return false;
+  n=Math.max(1,Math.round(n*CFG.difficulty[settings.diff].dmg));
+  st.hp=Math.max(0,st.hp-n);
+  p.inv=CFG.player.invuln;fx.hit=.35;shake=Math.max(shake,.12);
+  burst(p.x+p.w/2,Math.min(p.y+p.h/2,VIEW_H-20),"#d9493f",8,.7);
+  texts.push({x:p.x+p.w/2,y:p.y-6,s:`-${n}`,life:.8,col:"#ff8a7a"});
+  if(o.from!=null){const d=Math.sign(p.x+p.w/2-o.from)||-p.face;p.vx=d*CFG.player.knockX;p.vy=Math.min(p.vy,-CFG.player.knockY);}
+  hud();
+  if(st.hp<=0){die();return true;}
+  return false;
+}
+// falling into a pit (or acid) is the only thing that sends you back to the checkpoint
+function fellOff(dmg){
+  if(hurtP(dmg,{force:true}))return;
+  spawn();p.inv=1.2;
 }
 function finishLevel(){
   const maxGems=LEVELS.reduce((s,l)=>s+l.gems.length,0)+SUB.gems.length;
   if(lvlIdx>=LEVELS.length-1){
     const best=Math.max(loadBest(),gemTotal);saveBest(best);
+    try{localStorage.removeItem(SAVE_KEY);}catch(_){}
     overlay("Ти дійшов до ЧАЕС!",`Артефактів: <span class="big">${gemTotal} з ${maxGems}</span><br>Знищено ворогів: ${kills}<br>Рекорд артефактів: ${best}`,"Знову в Зону",newGame);
   }else{
-    const healed=lives<5;if(healed)lives++;
+    st.items.medkit++;
     const n=LEVELS[lvlIdx+1];
-    overlay(`${L.name}: пройдено`,`Наступна локація: <span class="big">${n.name}</span>${healed?"<br>Знайдено аптечку: +1 життя":""}`,"Далі",()=>{lvlIdx++;build(lvlIdx);});
+    overlay(`${L.name}: пройдено`,`Наступна локація: <span class="big">${n.name}</span><br>Знайдено аптечку: +1`,"Далі",()=>enterLevel(lvlIdx+1));
   }
 }
 function quietGroup(c,r){
@@ -388,12 +491,13 @@ function burst(x,y,col,n,sp=1){
 
 // ---------- update ----------
 let dt=0;
+const ITEM_NAMES={grenade:"гран.",medkit:"аптечка"};
 const DEATH_COL={boar:"#c49390",big:"#c49390",dog:"#5a514a",crow:"#2a2a32",stalker:"#3a332c",rat:"#6a5e55"};
 function damage(e,n){
   e.hp-=n;e.hit=.12;
   if(e.hp<=0){e.alive=false;kills++;hud();burst(e.x+e.w/2,e.y+e.h/2,DEATH_COL[e.type],e.type==="big"?26:12);
     if(e.type!=="stalker")burst(e.x+e.w/2,e.y+e.h/2,"#a8c94a",5);
-    else pickups.push({x:e.x+e.w/2-5,y:e.y+e.h-16,vy:-220,n:Math.random()<.35?2:1});}
+    else pickups.push({x:e.x+e.w/2-5,y:e.y+e.h-16,vy:-220,...(Math.random()<.3?{kind:"medkit",n:1}:{kind:"grenade",n:Math.random()<.35?2:1})});}
 }
 function explode(n){
   n.fuse=0;booms.push({x:n.x,y:n.y,t:0});shake=.3;
@@ -464,7 +568,7 @@ function update(){
   if(driving()){
     gReq=bReq=false;
     p.x=car.x+car.w/2-p.w/2;p.y=car.y+car.h-p.h;p.vx=car.vx;p.vy=car.vy;p.face=car.face;p.inv=0;
-    if(car.y>VIEW_H+60){car=null;hud();hurt(true);return;}
+    if(car.y>VIEW_H+60){car=null;hud();fellOff(CFG.dmg.fall);return;}
   }else{
   const dir=(keys.right?1:0)-(keys.left?1:0);
   if(dir){p.vx+=dir*ACC*dt*(p.onGround?1:.75);p.vx=Math.max(-MAX,Math.min(MAX,p.vx));p.face=dir;}
@@ -484,7 +588,10 @@ function update(){
   }
 
   // checkpoints
-  for(const c of L.cps) if(c>cpCol&&p.x>c*T){cpCol=c;burst(c*T+16,topAt(c*T+16,2)-32,"#7fe08a",12,.6);}
+  for(const c of L.cps) if(c>cpCol&&p.x>c*T){cpCol=c;burst(c*T+16,topAt(c*T+16,2)-32,"#7fe08a",12,.6);texts.push({x:c*T+16,y:topAt(c*T+16,2)-50,s:"Збережено",life:1.2});saveGame();saveT=0;}
+  saveT+=dt;
+  if(saveT>CFG.autosave&&body().onGround&&p.inv<=0&&!enemies.some(e=>e.alive&&Math.abs(e.x-p.x)<160)){saveT=0;saveGame();}
+  fx.hit=Math.max(0,fx.hit-dt);
 
   // shooting
   p.cd-=dt;p.flash-=dt;p.recoil=Math.max(0,p.recoil-dt*20);
@@ -504,7 +611,7 @@ function update(){
 
   // grenades
   if(gReq){gReq=false;
-    if(nades>0){nades--;hud();
+    if(st.items.grenade>0){st.items.grenade--;hud();
       grenades.push({x:p.x+p.w/2+p.face*8,y:p.y+8,vx:p.face*270+p.vx*.5,vy:-390,fuse:1.3,rot:0});}
     else texts.push({x:p.x+p.w/2,y:p.y-8,s:"Немає гранат",life:.9});
   }
@@ -550,8 +657,9 @@ function update(){
     if(k.vy>0&&k.y+12>=gs&&k.y+12-k.vy*dt<=gs+12){k.y=gs-12;k.vy=0;}
     else if(k.vy>0&&standable(tile(c,r))&&k.y+12-k.vy*dt<=r*T+1){k.y=r*T-12;k.vy=0;}
     const bd=body();
-    if(Math.abs(bd.x+bd.w/2-(k.x+5))<bd.w/2+7&&Math.abs(bd.y+bd.h/2-(k.y+6))<22){k.taken=true;nades+=k.n;hud();
-      texts.push({x:k.x+5,y:k.y-6,s:`+${k.n} ${k.n>1?"гранати":"граната"}`,life:1});burst(k.x+5,k.y+6,"#c3d08a",8,.5);}
+    if(Math.abs(bd.x+bd.w/2-(k.x+5))<bd.w/2+7&&Math.abs(bd.y+bd.h/2-(k.y+6))<22){k.taken=true;
+      st.items[k.kind]=(st.items[k.kind]||0)+k.n;if(k.map)pickedMap.push(k.map);hud();
+      texts.push({x:k.x+5,y:k.y-6,s:`+${k.n} ${ITEM_NAMES[k.kind]}`,life:1});burst(k.x+5,k.y+6,"#c3d08a",8,.5);}
   }
   pickups=pickups.filter(k=>!k.taken&&k.y<VIEW_H+40);
   for(const s of texts){s.y-=28*dt;s.life-=dt;}
@@ -560,7 +668,7 @@ function update(){
     b.x+=b.vx*dt;b.life-=dt;
     if(solid(Math.floor(b.x/T),Math.floor(b.y/T))||b.y>surf(b.x)){b.life=0;burst(b.x,b.y,"#f3d27a",3,.4);continue;}
     if(driving()){if(b.x>car.x&&b.x<car.x+car.w&&b.y>car.y&&b.y<car.y+car.h){b.life=0;burst(b.x,b.y,"#f3d27a",4,.5);carDamage(4);}continue;}
-    if(b.x>p.x&&b.x<p.x+p.w&&b.y>p.y&&b.y<p.y+p.h){b.life=0;if(hurt(false))return;}
+    if(b.x>p.x&&b.x<p.x+p.w&&b.y>p.y&&b.y<p.y+p.h){b.life=0;if(hurtP(CFG.dmg.bandit,{from:b.x-b.vx}))return;}
   }
   ebullets=ebullets.filter(b=>b.life>0);
 
@@ -568,10 +676,10 @@ function update(){
   const bd=body(), l=Math.floor(bd.x/T), rr=Math.floor((bd.x+bd.w-.01)/T), t=Math.floor(bd.y/T), bo=Math.floor((bd.y+bd.h-.01)/T);
   for(let r=t;r<=bo;r++)for(let c=l;c<=rr;c++) if(tile(c,r)==="^"&&!isQuiet(c,r)&&bd.y+bd.h>r*T+14){
     if(driving()){if(car.zap<=0){car.zap=.6;car.vy=-320;carDamage(15);burst(c*T+16,r*T+T-6,"#e6f4ff",10,.6);}}
-    else if(hurt(false))return;}
+    else if(hurtP(CFG.dmg.electra,{from:c*T+16}))return;}
   if(L.hatch&&!driving()&&tile(Math.floor((p.x+p.w/2)/T),10)==="H"&&p.y>10*T+6){enterSub();return;}
-  if(L.sub&&p.y+p.h>10*T+6){burst(p.x+p.w/2,10*T,"#8fd14a",12);hurt(true);return;}
-  if(p.y>VIEW_H+60){hurt(true);return;}
+  if(L.sub&&p.y+p.h>10*T+6){burst(p.x+p.w/2,10*T,"#8fd14a",12);fellOff(CFG.dmg.acid);return;}
+  if(p.y>VIEW_H+60){fellOff(CFG.dmg.fall);return;}
 
   for(const g of gems){
     if(g.taken)continue;
@@ -620,7 +728,7 @@ function update(){
     }
     if(p.x<e.x+e.w&&p.x+p.w>e.x&&p.y<e.y+e.h&&p.y+p.h>e.y){
       if(p.vy>0&&p.y+p.h-e.y<16){damage(e,2);p.vy=keys.jump?-560:-420;}
-      else if(hurt(false))return;
+      else if(hurtP(CFG.dmg[e.type],{from:e.x+e.w/2}))return;
     }
   }
   for(const q of particles){q.vy+=900*dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.life-=dt;}
@@ -749,6 +857,11 @@ function drawAK(gx,gy,face,flash,recoil){
   ctx.restore();
 }
 
+function medkitSprite(x,y){
+  ctx.fillStyle="#e9e6da";rr(x-7,y-6,14,11,2);ctx.fill();
+  ctx.fillStyle="#c93a32";ctx.fillRect(x-1.5,y-4.5,3,8);ctx.fillRect(x-4.5,y-1.5,9,3);
+  ctx.fillStyle="#8a877c";ctx.fillRect(x-3,y-8,6,2);
+}
 function nadeSprite(x,y,rot){
   ctx.save();ctx.translate(x,y);ctx.rotate(rot);
   ctx.fillStyle="#56622f";ctx.beginPath();ctx.ellipse(0,1,4.5,5.5,0,0,7);ctx.fill();
@@ -1068,7 +1181,10 @@ function draw(){
     ctx.beginPath();ctx.arc(gm.x,y,r+4+Math.sin(time*3+gm.ph)*1.5,0,7);ctx.stroke();ctx.globalAlpha=1;
   }
   for(const k of pickups){const bob=k.vy===0?Math.sin(time*4+k.x)*1.5:0;
-    ctx.shadowColor="#e5c33a";ctx.shadowBlur=8;nadeSprite(k.x+5,k.y+5+bob,0);if(k.n>1)nadeSprite(k.x+12,k.y+7+bob,.4);ctx.shadowBlur=0;}
+    ctx.shadowColor="#e5c33a";ctx.shadowBlur=8;
+    if(k.kind==="medkit")medkitSprite(k.x+5,k.y+6+bob);
+    else{nadeSprite(k.x+5,k.y+5+bob,0);if(k.n>1)nadeSprite(k.x+12,k.y+7+bob,.4);}
+    ctx.shadowBlur=0;}
   for(const e of enemies){if(e.alive||e.dead<.5)drawEnemy(e);}
   if(car)drawCar();
   ctx.fillStyle="#ffe7a0";
@@ -1111,7 +1227,7 @@ function draw(){
     ctx.fillStyle="#fff3c4";ctx.beginPath();ctx.arc(b.x,b.y,R*.5*(1-k),0,7);ctx.fill();}
   ctx.globalAlpha=1;
   ctx.font="800 12px Nunito, system-ui, sans-serif";ctx.textAlign="center";
-  for(const s of texts){ctx.globalAlpha=Math.min(1,s.life*2);ctx.fillStyle="#1b1e18";ctx.fillText(s.s,s.x+1,s.y+1);ctx.fillStyle="#e8f0b0";ctx.fillText(s.s,s.x,s.y);}
+  for(const s of texts){ctx.globalAlpha=Math.min(1,s.life*2);ctx.fillStyle="#1b1e18";ctx.fillText(s.s,s.x+1,s.y+1);ctx.fillStyle=s.col||"#e8f0b0";ctx.fillText(s.s,s.x,s.y);}
   ctx.globalAlpha=1;
   ctx.restore();
   ctx.fillStyle=L.sub?"rgba(140,200,180,.35)":"rgba(220,215,190,.55)";
@@ -1123,6 +1239,13 @@ function draw(){
   const vg=ctx.createRadialGradient(viewW/2,VIEW_H/2,VIEW_H*.4,viewW/2,VIEW_H/2,Math.max(viewW,VIEW_H)*.8);
   vg.addColorStop(0,"rgba(0,0,0,0)");vg.addColorStop(1,"rgba(0,0,0,.35)");
   ctx.fillStyle=vg;ctx.fillRect(0,0,viewW,VIEW_H);
+  if(fx.hit>0){ctx.fillStyle=`rgba(200,30,20,${fx.hit*.55})`;ctx.fillRect(0,0,viewW,VIEW_H);}
+  if(st.hp>0&&st.hp<25){
+    const k=.35+.15*Math.sin(time*5);
+    const rv=ctx.createRadialGradient(viewW/2,VIEW_H/2,VIEW_H*.35,viewW/2,VIEW_H/2,Math.max(viewW,VIEW_H)*.75);
+    rv.addColorStop(0,"rgba(120,0,0,0)");rv.addColorStop(1,`rgba(140,0,0,${k})`);
+    ctx.fillStyle=rv;ctx.fillRect(0,0,viewW,VIEW_H);
+  }
   if(bannerT>0){ctx.globalAlpha=Math.min(1,bannerT);ctx.font="22px 'Russo One', system-ui, sans-serif";ctx.textAlign="center";
     ctx.fillStyle="rgba(0,0,0,.6)";ctx.fillText(banner,viewW/2+2,92);ctx.fillStyle="#e5c33a";ctx.fillText(banner,viewW/2,90);ctx.globalAlpha=1;}
 }
@@ -1137,9 +1260,17 @@ function frame(now){
 }
 document.addEventListener("visibilitychange",()=>{last=performance.now();for(const k in keys)keys[k]=false;});
 
-resize();newGame();
+resize();
+// the first screen only shows the level behind the card; nothing is saved until the player picks
+levelStart={st:clone(st),gemTotal,kills};build(0);ovAction=newGame;
 const best=loadBest();
 if(best)$("ovText").innerHTML+=`<br>Твій рекорд: ${best} артефактів.`;
+if(readSave()){$("ovBtn").textContent="Продовжити";ovAction=loadGame;$("ovBtn2").hidden=false;$("ovBtn2").textContent="Нова гра";ovAction2=newGame;}
+// leaving the tab pauses the game and keeps progress
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden&&running){saveGame();overlay("Пауза","Гру призупинено.","Продовжити",null);}
+});
+addEventListener("pagehide",()=>{if(running)saveGame();});
 requestAnimationFrame(frame);
 })();
 </script>
