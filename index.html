@@ -142,8 +142,21 @@ const T=32, ROWS=12, VIEW_H=ROWS*T;
 const CFG={
   player:{maxHp:100, invuln:.6, knockX:230, knockY:260},
   // damage dealt to the stalker, HP
-  dmg:{dog:12, boar:25, big:35, snork:20, bloodsucker:30, controller:15, stalker:10, bandit:15, rat:6, crow:8,
-       electra:30, explosion:40, fall:35, acid:35},
+  // environment damage, HP (monsters carry their own damage below)
+  dmg:{bandit:15, electra:30, explosion:40, fall:35, acid:35},
+  // detect: how far they notice you, range: when they attack, recover: pause after an attack.
+  // small: the UAZ runs them over; ramCost: what ramming them costs the car.
+  enemies:{
+    dog:{name:"Сліпий пес", hp:35, w:28, h:18, speed:60, chase:175, detect:240, detectT:.25, range:90, leap:[270,-330], dmg:12, bleed:.15, recover:.7, pack:240, small:true, ramCost:6, flee:true},
+    boar:{name:"Кабан", hp:100, w:30, h:22, speed:38, detect:270, detectT:.8, charge:330, chargeTime:1.4, dmg:25, bleed:.35, recover:1.3, ramCost:16, carDmg:22},
+    big:{name:"Секач", hp:300, w:46, h:34, speed:32, detect:300, detectT:1, charge:300, chargeTime:1.6, dmg:35, bleed:.5, recover:1.5, ramCost:30, carDmg:30},
+    snork:{name:"Снорк", hp:75, w:26, h:16, speed:55, chase:115, detect:290, detectT:.4, range:200, leap:[420,-400], dmg:20, bleed:.3, recover:.8, small:true, ramCost:10, flee:true},
+    bloodsucker:{name:"Кровосос", hp:140, w:22, h:34, speed:45, chase:155, detect:320, detectT:.2, range:34, reveal:.45, dmg:30, bleed:.7, recover:1.2, ramCost:20, carBite:8},
+    controller:{name:"Контролер", hp:180, w:26, h:34, speed:20, chase:22, detect:340, detectT:.5, range:300, charge:1.2, cd:4.5, dmg:15, psi:1.6, ramCost:15},
+    stalker:{name:"Бандит", hp:80, w:20, h:28, speed:40, detect:300, detectT:.3, range:300, cd:1.3, recover:.5, small:true, ramCost:8},
+    rat:{name:"Щур", hp:15, w:20, h:12, speed:70, chase:130, detect:170, detectT:.15, range:28, dmg:6, recover:.5, small:true, ramCost:3, flee:true},
+    crow:{name:"Ворона", hp:20, w:22, h:14, detect:180, dmg:8, recover:1.6, small:true, ramCost:2}
+  },
   heal:{medkit:40},
   // falloff:[full-damage distance, zero-point distance, minimum share]
   weapons:{
@@ -161,14 +174,6 @@ const freshSt=()=>({hp:CFG.player.maxHp, cur:"ak", wpn:{pm:{mag:8},sg:{mag:2},ak
   items:{medkit:2, grenade:2, "9x18":32, "12x70":10, "5.45x39":60}});
 const clone=o=>JSON.parse(JSON.stringify(o));
 const ART_COLORS=["#8fe0d0","#f2a640","#c78bff","#7fd36a","#ff6f61"];
-const ETYPES={
-  boar:{w:30,h:22,hp:100,speed:55},
-  big:{w:46,h:34,hp:300,speed:40},
-  dog:{w:28,h:18,hp:35,speed:115},
-  crow:{w:22,h:14,hp:20,speed:0},
-  stalker:{w:20,h:28,hp:80,speed:40},
-  rat:{w:20,h:12,hp:15,speed:95}
-};
 const THEMES={
   village:{sky:["#2b3127","#5b6249","#7a7d5a"],far:"#46503f",mid:"#262b20",grass:["#5e5a32","#8a8650"]},
   forest:{sky:["#2e2522","#6a4a38","#8a6a4a"],far:"#5a3f2e",mid:"#3a2418",grass:["#6e3c22","#a0582f"]},
@@ -186,34 +191,34 @@ const LEVELS=[
   hills:[[8,4,36],[20,5,44],[32,4,30],[51,6,60]],
   blocks:[["^",37,9,2]],
   gems:[[6,8],[8,7],[17,7],[18,7],[22,6],[23,6],[30,7],[34,6],[38,6],[46,7],[53,6],[54,6],[60,8]],
-  enemies:[[22,9,"dog"],[34,9,"boar"],[58,9,"stalker"],[27,4,"crow"]], start:2, cps:[33], flag:63, car:5},
+  enemies:[[22,9,"dog"],[24,9,"dog"],[34,9,"boar"],[58,9,"stalker"],[27,4,"crow"]], start:2, cps:[33], flag:63, car:5},
  {name:"Рудий ліс", items:[[30,"medkit"],[60,"medkit"]], theme:"forest", w:80, gaps:[[12,3],[22,3],[33,4],[50,3],[64,3]],
   hills:[[5,3,40],[15,3,30],[25,4,40],[53,6,72]],
   blocks:[["^",42,9,2],["^",68,9,2]],
   gems:[[6,7],[13,7],[16,7],[19,7],[23,7],[26,6],[28,6],[34,7],[35,7],[40,7],[45,7],[51,7],[56,5],[65,7],[72,8]],
-  enemies:[[18,9,"boar"],[28,9,"dog"],[40,9,"stalker"],[71,9,"stalker"],[75,9,"dog"],[20,4,"crow"],[47,3,"crow"]], start:2, cps:[39], flag:77, car:2},
+  enemies:[[18,9,"boar"],[28,9,"dog"],[29,9,"dog"],[40,9,"stalker"],[47,9,"snork"],[71,9,"stalker"],[75,9,"dog"],[76,9,"dog"],[20,4,"crow"],[47,3,"crow"]], start:2, cps:[39], flag:77, car:2},
  {name:"Прип'ять", items:[[27,"medkit"],[70,"medkit"]], theme:"town", w:90, gaps:[[10,3],[20,3],[30,4],[45,3],[56,4],[72,3]],
   hills:[[23,3,36],[60,3,30],[79,4,60]],
   blocks:[["^",14,9,2],["^",37,9,2],["^",65,9,2]],
   gems:[[11,7],[15,7],[21,7],[24,6],[25,6],[31,7],[32,7],[39,7],[43,7],[46,7],[57,7],[58,7],[61,6],[67,7],[73,7],[80,6],[81,6]],
-  enemies:[[17,9,"dog"],[25,9,"stalker"],[39,9,"boar"],[50,9,"stalker"],[76,9,"dog"],[84,9,"big"],[34,4,"crow"],[60,4,"crow"]], start:2, cps:[49], flag:88, hatch:{col:63,ret:77}, car:3},
+  enemies:[[17,9,"dog"],[25,9,"stalker"],[39,9,"snork"],[50,9,"stalker"],[53,9,"bloodsucker"],[76,9,"dog"],[78,9,"snork"],[84,9,"bloodsucker"],[34,4,"crow"],[60,4,"crow"]], start:2, cps:[49], flag:88, hatch:{col:63,ret:77}, car:3},
  {name:"Станція Янів", items:[[37,"medkit"],[60,"medkit"]], theme:"rail", w:100, gaps:[[14,3],[31,3],[42,4],[64,3],[72,3],[89,3]],
   blocks:[["W",21,8,6],["W",21,9,6],["W",52,8,5],["W",52,9,5],["^",58,9,2],["W",79,8,4],["W",79,9,4],["^",83,9,2]],
   gems:[[10,7],[15,7],[22,6],[25,6],[32,7],[36,7],[43,6],[44,7],[53,6],[55,6],[65,7],[68,7],[73,7],[80,6],[86,7],[90,7],[94,8]],
-  enemies:[[12,9,"dog"],[23,7,"stalker"],[35,9,"stalker"],[47,9,"boar"],[54,7,"dog"],[67,9,"stalker"],[93,9,"stalker"],[95,9,"dog"],[33,4,"crow"],[66,4,"crow"]],
+  enemies:[[12,9,"dog"],[13,9,"dog"],[23,7,"stalker"],[35,9,"stalker"],[47,9,"boar"],[54,7,"dog"],[67,9,"snork"],[93,9,"stalker"],[95,9,"bloodsucker"],[33,4,"crow"],[66,4,"crow"]],
   start:2, cps:[46], flag:97, car:4},
  {name:"Радар «Дуга»", items:[[41,"medkit"],[70,"medkit"]], theme:"duga", w:105, gaps:[[12,3],[22,4],[36,3],[46,4],[62,3],[74,4],[90,3]],
   hills:[[27,4,40],[51,5,56],[78,4,48]],
   blocks:[["^",66,9,2],["^",83,9,2],["^",96,9,2]],
   gems:[[9,8],[13,7],[16,7],[18,7],[23,7],[24,7],[25,7],[28,6],[30,6],[37,7],[40,7],[44,7],[47,7],[48,7],[53,5],[57,7],[63,7],[67,7],[70,7],[75,7],[76,7],[79,6],[85,7],[91,7],[97,7],[99,7]],
-  enemies:[[8,9,"dog"],[18,9,"stalker"],[32,9,"boar"],[40,9,"stalker"],[43,9,"stalker"],[55,9,"dog"],[70,9,"stalker"],[68,9,"stalker"],[86,9,"boar"],[94,9,"stalker"],[16,4,"crow"],[50,3,"crow"],[78,3,"crow"]],
+  enemies:[[8,9,"dog"],[18,9,"stalker"],[32,9,"snork"],[40,9,"stalker"],[43,9,"snork"],[55,9,"controller"],[70,9,"stalker"],[68,9,"bloodsucker"],[86,9,"boar"],[94,9,"controller"],[16,4,"crow"],[50,3,"crow"],[78,3,"crow"]],
   start:2, cps:[54], flag:102, car:4},
  {name:"ЧАЕС", items:[[35,"medkit"],[62,"medkit"],[97,"medkit"]], theme:"npp", w:115, gaps:[[10,3],[20,3],[30,4],[47,3],[58,4],[76,3],[86,4],[100,3]],
   hills:[[23,3,40],[50,4,36],[63,3,30],[79,3,50],[104,3,56]],
   blocks:[["^",14,9,2],["^",38,9,2],["^",68,9,2],["^",93,9,2]],
   gems:[[11,7],[15,6],[21,7],[24,6],[25,6],[31,7],[32,7],[35,7],[41,7],[44,7],[48,7],[52,6],[59,7],[60,7],[64,6],[70,7],[72,7],[77,7],[80,6],[87,7],[96,7],[101,7],[105,6]],
-  enemies:[[6,9,"dog"],[17,9,"stalker"],[27,9,"boar"],[36,9,"stalker"],[41,9,"stalker"],[50,9,"dog"],[56,9,"stalker"],[66,9,"boar"],[71,9,"stalker"],
-           [80,9,"stalker"],[84,9,"dog"],[91,9,"stalker"],[109,9,"big"],[25,3,"crow"],[45,3,"crow"],[62,3,"crow"],[90,3,"crow"]],
+  enemies:[[6,9,"dog"],[7,9,"dog"],[17,9,"stalker"],[27,9,"snork"],[36,9,"stalker"],[41,9,"bloodsucker"],[50,9,"dog"],[56,9,"stalker"],[66,9,"boar"],[71,9,"controller"],
+           [80,9,"snork"],[84,9,"dog"],[91,9,"stalker"],[109,9,"big"],[25,3,"crow"],[45,3,"crow"],[62,3,"crow"],[90,3,"crow"]],
   start:2, cps:[37,66], flag:112, bossHp:400, car:2}
 ];
 const SUB={name:"Підземні комунікації", theme:"sewer", sub:true, w:72, spawnRow:7,
@@ -238,8 +243,6 @@ const rnd=n=>{const s=Math.sin(n*12.9898+78.233)*43758.5453;return s-Math.floor(
 // ---------- state ----------
 let L, TH, grid, gems, enemies, bullets, ebullets, particles, p, camX=0, lvlIdx=0, st=freshSt(), levelStart=null, fx={hit:0}, saveT=0, settings={diff:"normal"}, gemTotal=0, kills=0, running=false, time=0, cpCol=2, grenades=[], pickups=[], booms=[], texts=[], shake=0, gReq=false, banner="", bannerT=0, saved=null, bolts=[], bReq=false, boltCd=0, quiet={}, car=null, cReq=false, fireReq=false, rReq=false;
 const CAR_MAX=100;
-// how hard a ram hurts the UAZ, by enemy type
-const RAM_COST={boar:10,big:22,dog:6,crow:2,stalker:8,rat:3};
 const driving=()=>car&&car.drive;
 const body=()=>driving()?car:p;
 const isQuiet=(c,r)=>(quiet[c+","+r]||0)>time;
@@ -265,9 +268,10 @@ function buildLevel(def){
     return {x:c*T+16,y,taken:false,col:ART_COLORS[k%ART_COLORS.length],ph:k};
   });
   enemies=L.enemies.map(([c,r,type],k)=>{
-    const d=ETYPES[type], hp=type==="big"&&L.bossHp?L.bossHp:d.hp;
+    const d=CFG.enemies[type], hp=type==="big"&&L.bossHp?L.bossHp:d.hp;
     const ex=c*T+(T-d.w)/2;
-    const e={type,x:ex,y:type==="crow"?(r+1)*T-d.h:topAt(ex+d.w/2,r+1)-d.h,w:d.w,h:d.h,speed:d.speed,face:-1,vx:0,vy:0,hp,max:hp,alive:true,dead:0,hit:0,cd:.8,flash:0,alert:false};
+    const e={type,x:ex,y:type==="crow"?(r+1)*T-d.h:topAt(ex+d.w/2,r+1)-d.h,w:d.w,h:d.h,face:-1,vx:0,vy:0,hp,max:hp,alive:true,dead:0,hit:0,cd:.8,flash:0,
+      state:"patrol",st:2+rnd(k)*4,lost:0,didHit:false,stun:0,reveal:0};
     if(type==="crow"){e.ox=c*T;e.oy=r*T;e.t=k*1.7;}
     return e;
   });
@@ -282,6 +286,12 @@ function spawn(){
   p={x:cpCol*T+5,y:topAt(cpCol*T+16,2)-28,w:22,h:28,vx:0,vy:0,onGround:false,coyote:0,buf:0,face:1,walk:0,inv:1.5,squash:0,cd:0,flash:0,recoil:0};
   ebullets=[];
   if(car)car.drive=false;
+  for(const e of enemies||[]){
+    if(!e.alive||e.type==="crow"||Math.abs(e.x+e.w/2-(p.x+p.w/2))>140)continue;
+    const nx=e.x+(e.x>=p.x?1:-1)*180, y=topAt(nx+e.w/2,2);
+    if(isFinite(y)){e.x=nx;e.y=y-e.h;}
+    setState(e,"idle",1.5);
+  }
   camX=Math.max(0,Math.min(p.x-viewW*.42,L.w*T-viewW));
 }
 const carCol=hp=>hp>CAR_MAX*.5?"#7fd36a":hp>CAR_MAX*.25?"#e5c33a":"#d9493f";
@@ -501,6 +511,15 @@ function hurtP(n,o={}){
   if(st.hp<=0){die();return true;}
   return false;
 }
+// damage over time (psi, radiation, bleeding): no knockback, no invulnerability window
+let hudT=0;
+function drain(n){
+  if(st.hp<=0)return true;
+  st.hp=Math.max(0,st.hp-n*CFG.difficulty[settings.diff].dmg);
+  hudT-=dt;if(hudT<=0||st.hp<=0){hudT=.2;hud();}
+  if(st.hp<=0){die();return true;}
+  return false;
+}
 // falling into a pit (or acid) is the only thing that sends you back to the checkpoint
 function fellOff(dmg){
   if(hurtP(dmg,{force:true}))return;
@@ -547,11 +566,17 @@ function burst(x,y,col,n,sp=1){
 let dt=0;
 const ITEM_NAMES={grenade:"гран.",medkit:"аптечка","9x18":"набоїв 9×18","12x70":"набоїв 12 кал.","5.45x39":"набоїв 5,45"};
 const AMMO_COL={"9x18":"#c9a24a","12x70":"#c94a3a","5.45x39":"#7a9a4a"};
-const DEATH_COL={boar:"#c49390",big:"#c49390",dog:"#5a514a",crow:"#2a2a32",stalker:"#3a332c",rat:"#6a5e55"};
+const DEATH_COL={boar:"#c49390",big:"#c49390",dog:"#5a514a",crow:"#2a2a32",stalker:"#3a332c",rat:"#6a5e55",snork:"#5d5a4e",bloodsucker:"#a88a7a",controller:"#8a7a5e"};
 function damage(e,n,kick=0){
+  if(!e.alive)return;
   e.hp-=n;e.hit=.12;
   if(kick&&e.type!=="crow"){e.x+=kick*.06;e.stun=Math.max(e.stun||0,Math.min(.25,Math.abs(kick)/600));}
-  if(e.hp<=0){e.alive=false;kills++;hud();burst(e.x+e.w/2,e.y+e.h/2,DEATH_COL[e.type],e.type==="big"?26:12);
+  // being shot gives you away: a calm monster turns on you, a cloaked bloodsucker flickers into view
+  if(e.hp>0){
+    if(e.state==="idle"||e.state==="patrol")detect(e,(p.x+p.w/2)-(e.x+e.w/2));
+    if(e.type==="bloodsucker")e.reveal=.6;
+  }
+  if(e.hp<=0){e.alive=false;e.state="dead";kills++;hud();burst(e.x+e.w/2,e.y+e.h/2,DEATH_COL[e.type],e.type==="big"?26:12);
     if(e.type!=="stalker")burst(e.x+e.w/2,e.y+e.h/2,"#a8c94a",5);
     else{
       const r=Math.random(), drop=r<.2?{kind:"medkit",n:1}:r<.4?{kind:"grenade",n:1}:r<.6?{kind:"12x70",n:6}:r<.8?{kind:"9x18",n:16}:{kind:"5.45x39",n:30};
@@ -568,6 +593,165 @@ function explode(n){
     if(d<R)hurtP(CFG.dmg.explosion*(1-d/R),{force:true,from:n.x});}
   SFX.boom();
   burst(n.x,n.y,"#ffb04a",18,1.2);burst(n.x,n.y,"#6b6b62",12,.6);
+}
+// ---------- monster AI: idle → patrol → detect → chase → attack → recover (→ dead) ----------
+function setState(e,s,t=0){e.state=s;e.st=t;e.didHit=false;e.air=false;}
+function detect(e,dx){
+  const C=CFG.enemies[e.type];
+  e.face=Math.sign(dx)||e.face;setState(e,"detect",C.detectT||.3);
+  if(C.pack)for(const o of enemies)
+    if(o!==e&&o.alive&&o.type===e.type&&(o.state==="idle"||o.state==="patrol")&&Math.abs(o.x-e.x)<C.pack){o.face=Math.sign(dx)||o.face;setState(o,"detect",.2+Math.random()*.3);}
+}
+const isHazard=t=>t==="^"||t==="F"||t==="V";
+function safeAhead(e,dir){
+  const ahead=dir>0?e.x+e.w+2:e.x-2, c=Math.floor(ahead/T), fr=Math.floor((e.y+e.h+1)/T);
+  if(isHazard(tile(c,Math.floor((e.y+e.h-1)/T))))return false;
+  return standable(tile(c,fr))||surf(ahead)<=e.y+e.h+10;
+}
+function startAttack(e){
+  const C=CFG.enemies[e.type];setState(e,"attack");
+  switch(e.type){
+    case "dog":case "snork":{
+      // aimed leap: pick the horizontal speed that lands on the target
+      const t=body(), dx=(t.x+t.w/2)-(e.x+e.w/2), air=2*-C.leap[1]/1800;
+      e.vy=C.leap[1];e.vx=Math.max(-C.leap[0],Math.min(C.leap[0],dx/air));e.onGround=false;e.air=true;e.st=2;SFX.growl(e.type);break;}
+    case "rat":e.st=.35;break;
+    case "boar":case "big":e.st=C.chargeTime;SFX.growl("boar");break;
+    case "bloodsucker":e.st=C.reveal;e.reveal=C.reveal+.3;SFX.growl("bloodsucker");break;
+    case "controller":e.st=C.charge;SFX.psiCharge();break;
+    case "stalker":e.cd=Math.min(e.cd,.5);break;
+  }
+}
+// returns the horizontal speed the monster wants this frame
+function attackStep(e,C,dx,dy,see){
+  switch(e.type){
+    case "dog":case "snork":
+      if(!e.onGround)return e.vx;
+      setState(e,"recover",C.recover);return 0;
+    case "rat":
+      if(e.st<=0)setState(e,"recover",C.recover);
+      return e.face*200;
+    case "boar":case "big":
+      if(e.st<=0){setState(e,"recover",C.recover);return 0;}
+      return e.face*C.charge;
+    case "bloodsucker":
+      if(e.st<=0){
+        if(driving()){if(overlap(car,e,10))carDamage(C.carBite);}
+        else if(Math.abs(dx)<C.range+14&&Math.abs(dy)<34)hurtP(C.dmg,{from:e.x+e.w/2,bleed:C.bleed});
+        setState(e,"recover",C.recover);
+      }
+      return 0;
+    case "controller":
+      e.face=Math.sign(dx)||e.face;
+      if(e.st<=0){
+        // the psi blast needs the stalker in sight at the moment it fires: break line of sight to dodge it
+        if(see){st.psi=(st.psi||0)+C.dmg;fx.psi=C.psi;SFX.psi();texts.push({x:p.x+p.w/2,y:p.y-14,s:"Псі-атака!",life:1.1,col:"#d6a8ff"});}
+        setState(e,"recover",C.cd);
+      }
+      return 0;
+    case "stalker":
+      if(!see){setState(e,"patrol",3);return 0;}
+      e.face=Math.sign(dx)||e.face;e.cd-=dt;
+      if(e.cd<=0){e.cd=C.cd;e.flash=.07;
+        ebullets.push({x:e.x+e.w/2+e.face*26,y:e.y+e.h-11.5,vx:e.face*380,life:1.4});SFX.enemyShot(Math.abs(dx));}
+      return 0;
+  }
+  return 0;
+}
+function groundAI(e,G){
+  const C=CFG.enemies[e.type], t=body();
+  e.vy=Math.min(e.vy+G*dt,900);
+  const dx=(t.x+t.w/2)-(e.x+e.w/2), dy=(t.y+t.h)-(e.y+e.h), adx=Math.abs(dx);
+  const see=st.hp>0&&adx<C.detect&&Math.abs(dy)<90&&lineOfSight(e);
+  e.st-=dt;e.reveal-=dt;
+  // small mutants scatter from a speeding UAZ
+  if(C.flee&&driving()&&Math.abs(car.vx)>150&&e.state!=="attack"&&Math.sign(car.vx)===Math.sign(-dx)&&adx<170){
+    setState(e,"recover",1);e.flee=-Math.sign(dx)||1;e.face=e.flee;}
+  let vx=0;
+  switch(e.state){
+    case "idle":if(see)detect(e,dx);else if(e.st<=0)setState(e,"patrol",3+Math.random()*4);break;
+    case "patrol":vx=e.face*C.speed;if(see)detect(e,dx);else if(e.st<=0)setState(e,"idle",.8+Math.random()*1.5);break;
+    case "detect":
+      e.face=Math.sign(dx)||e.face;
+      if(e.st<=0){if(e.type==="boar"||e.type==="big"||e.type==="stalker"||e.type==="controller"&&see&&adx<=C.range)startAttack(e);else setState(e,"chase");}
+      break;
+    case "chase":
+      e.face=Math.sign(dx)||e.face;
+      e.lost=see?0:e.lost+dt;
+      if(e.lost>3){setState(e,"patrol",3);break;}
+      vx=e.face*(C.chase||C.speed);
+      if(see&&adx<=C.range&&Math.abs(dy)<40&&e.onGround&&(e.type!=="controller"||e.st<=0)){startAttack(e);vx=e.air?e.vx:0;}
+      break;
+    case "attack":vx=attackStep(e,C,dx,dy,see);break;
+    case "recover":
+      vx=e.flee?e.flee*(C.chase||C.speed)*1.15:e.type==="bloodsucker"?-e.face*110:0;
+      if(e.st<=0){const was=e.flee;e.flee=0;setState(e,see&&!was?"chase":"patrol",3);if(e.type==="controller")e.st=0;}
+      break;
+  }
+  if(e.stun>0){e.stun-=dt;vx=0;}
+  const charging=e.state==="attack"&&(e.type==="boar"||e.type==="big");
+  // never walk into a pit or an anomaly; a leap can still end badly
+  if(vx&&e.onGround&&!safeAhead(e,Math.sign(vx))){
+    vx=0;
+    if(e.state==="patrol")e.face=-e.face;
+    if(charging)setState(e,"recover",C.recover);
+  }
+  e.vx=vx;
+  if(moveX(e)){
+    if(e.state==="patrol")e.face=-e.face;
+    if(charging){setState(e,"recover",C.recover);e.stun=.4;shake=Math.max(shake,.1);}
+  }
+  moveY(e);
+}
+function crowAI(e){
+  const C=CFG.enemies.crow, t=body();
+  e.t+=dt;e.st-=dt;e.cd-=dt;
+  const tx=t.x+t.w/2, ty=t.y+t.h/2;
+  if(e.state==="attack"){
+    e.x+=e.vx*dt;e.y+=e.vy*dt;e.face=e.vx>=0?1:-1;
+    if(e.st<=0||e.y>ty+10||e.y>VIEW_H-40)setState(e,"recover",C.recover);
+  }else if(e.state==="recover"){
+    const hx=e.ox+Math.sin(e.t*.9)*80, hy=e.oy, d=Math.hypot(hx-e.x,hy-e.y);
+    if(d<6||e.st<=0){e.state="patrol";e.cd=1.5;}
+    else{e.x+=(hx-e.x)/d*150*dt;e.y+=(hy-e.y)/d*150*dt;e.face=hx>=e.x?1:-1;}
+  }else{
+    const px=e.x;e.x=e.ox+Math.sin(e.t*.9)*80;e.y=e.oy+Math.sin(e.t*2.3)*12;e.face=e.x>=px?1:-1;
+    if(st.hp>0&&e.cd<=0&&Math.abs(tx-e.x)<C.detect&&ty>e.y+20){
+      const d=Math.hypot(tx-e.x,ty-e.y)||1;
+      setState(e,"attack",1.4);e.vx=(tx-e.x)/d*250;e.vy=(ty-e.y)/d*250;SFX.growl("crow");
+    }
+  }
+}
+// what touching a monster does; returns true if it killed the stalker
+function contact(e){
+  const C=CFG.enemies[e.type];
+  if(driving()){
+    if(!overlap(car,e))return false;
+    const sp=Math.abs(car.vx), toward=Math.sign(car.vx)===Math.sign(e.x+e.w/2-(car.x+car.w/2));
+    if(sp>90&&toward){
+      const dir=Math.sign(car.vx);
+      if(C.small){damage(e,999);carDamage(C.ramCost);if(car.drive){car.vx*=.85;texts.push({x:e.x+e.w/2,y:e.y-6,s:"Таран!",life:.8});}}
+      else{damage(e,60,dir*200);carDamage(C.ramCost);car.vx=-dir*200;car.vy=-160;if(e.alive)setState(e,"recover",.8);}
+      shake=.15;burst(e.x+e.w/2,e.y+e.h/2,"#c94a43",8,.8);
+      return false;
+    }
+    if(e.state==="attack"&&!e.didHit){
+      e.didHit=true;
+      if(C.carDmg){carDamage(C.carDmg);car.vx+=e.face*220;car.vy=-180;shake=.2;texts.push({x:car.x+car.w/2,y:car.y-14,s:`${C.name} таранить УАЗ!`,life:1.1});setState(e,"recover",C.recover);}
+      else if(C.dmg)carDamage(C.carBite||4);
+    }
+    return false;
+  }
+  if(!overlap(p,e))return false;
+  if(p.vy>0&&p.y+p.h-e.y<16){damage(e,CFG.stomp);p.vy=keys.jump?-560:-420;return false;}
+  // only a real attack hurts: walking into a patrolling monster does nothing
+  if(e.state==="attack"&&!e.didHit&&C.dmg&&e.type!=="bloodsucker"&&e.type!=="controller"&&e.type!=="stalker"){
+    e.didHit=true;
+    const died=hurtP(C.dmg,{from:e.x+e.w/2,bleed:C.bleed});
+    if(e.type==="boar"||e.type==="big"||e.type==="rat"||e.type==="crow")setState(e,"recover",C.recover);
+    return died;
+  }
+  return false;
 }
 function lineOfSight(e){
   const r=Math.floor((e.y+e.h-12)/T), c0=Math.floor((e.x+e.w/2)/T), c1=Math.floor((p.x+p.w/2)/T), s=Math.sign(c1-c0);
@@ -656,7 +840,17 @@ const SFX=(()=>{
     hurt(){tone(.18,.25,"sawtooth",180,90);noise(.12,.2,"lowpass",700,200,1);},
     boom(){noise(1.1,.95,"lowpass",900,60,.7);tone(.5,.6,"sine",70,28);},
     throw(){noise(.12,.12,"bandpass",1200,2400,2);},
-    pickup(){tone(.08,.15,"triangle",660,990);tone(.1,.12,"triangle",990,1320,.07);}
+    pickup(){tone(.08,.15,"triangle",660,990);tone(.1,.12,"triangle",990,1320,.07);},
+    growl(t){
+      if(t==="dog")noise(.25,.25,"bandpass",500,300,3);
+      else if(t==="boar"){tone(.5,.3,"sawtooth",90,55);noise(.4,.2,"lowpass",400,150,1);}
+      else if(t==="snork")noise(.3,.25,"bandpass",900,400,4);
+      else if(t==="bloodsucker"){tone(.6,.25,"sawtooth",140,60);noise(.5,.2,"bandpass",300,120,2);}
+      else if(t==="crow")tone(.12,.12,"square",900,600);
+    },
+    psiCharge(){tone(1.2,.18,"sine",110,220);tone(1.2,.1,"sine",113,226);},
+    psi(){tone(.8,.3,"sawtooth",220,60);noise(.6,.25,"bandpass",600,200,6);},
+    stall(){tone(.6,.25,"sawtooth",120,40);noise(.4,.2,"lowpass",500,100,1);}
   };
   return api;
 })();
@@ -675,10 +869,12 @@ function carDamage(n){
   if(car.wreck)return;
   car.hp=Math.max(0,car.hp-n);car.hit=.12;hud();
   if(car.hp<=0){
-    car.wreck=true;car.drive=false;car.vx*=.3;
-    explode({x:car.x+car.w/2,y:car.y+car.h/2});burst(car.x+car.w/2,car.y+car.h/2,"#3a3c34",16,.8);
-    p.x=car.x+car.w/2-p.w/2;p.y=car.y+car.h-p.h;p.vx=-car.face*160;p.vy=-420;p.inv=1.5;
-    texts.push({x:car.x+car.w/2,y:car.y-10,s:"УАЗ знищено!",life:1.4});hud();
+    // critical damage: the engine dies and the stalker has to get out (a repair kit brings it back)
+    const was=car.drive;
+    car.wreck=true;car.drive=false;car.vx*=.3;shake=.25;
+    burst(car.x+car.w/2+car.face*20,car.y+8,"#3a3c34",14,.6);burst(car.x+car.w/2,car.y+car.h/2,"#f3d27a",6,.5);
+    if(was){p.x=car.x+car.w/2-p.w/2;p.y=car.y+car.h-p.h;p.vx=-car.face*120;p.vy=-300;p.inv=1;}
+    texts.push({x:car.x+car.w/2,y:car.y-10,s:"Двигун заглух!",life:1.6});SFX.stall();hud();
   }
 }
 function toggleCar(){
@@ -844,48 +1040,14 @@ function update(){
   for(const e of enemies){
     e.hit=Math.max(0,e.hit-dt);e.flash-=dt;
     if(!e.alive){e.dead+=dt;continue;}
-    if(e.type==="crow"){
-      e.t+=dt;const px=e.x;
-      e.x=e.ox+Math.sin(e.t*.9)*80;e.y=e.oy+Math.sin(e.t*2.3)*12;
-      e.face=e.x>=px?1:-1;
-    }else{
-      e.vy=Math.min(e.vy+G*dt,900);
-      let walk=true;
-      if(e.type==="stalker"){
-        const dx=(p.x+p.w/2)-(e.x+e.w/2), dy=(p.y+p.h)-(e.y+e.h);
-        e.alert=Math.abs(dx)<300&&Math.abs(dy)<40&&lineOfSight(e);
-        if(e.alert){
-          walk=false;e.face=dx>0?1:-1;e.cd-=dt;
-          if(e.cd<=0){e.cd=1.3;e.flash=.07;
-            ebullets.push({x:e.x+e.w/2+e.face*26,y:e.y+e.h-11.5,vx:e.face*380,life:1.4});SFX.enemyShot(Math.abs(dx));}
-        }else e.cd=Math.max(e.cd,.7);
-      }
-      if(e.stun>0){e.stun-=dt;walk=false;}
-      e.vx=walk?e.face*e.speed:0;
-      if(moveX(e))e.face=-e.face;
-      moveY(e);
-      if(walk&&e.onGround){
-        const ahead=e.face>0?e.x+e.w+1:e.x-1, c=Math.floor(ahead/T), fr=Math.floor((e.y+e.h+1)/T);
-        if(!(standable(tile(c,fr))||surf(ahead)<=e.y+e.h+10)||tile(c,Math.floor((e.y+e.h-1)/T))==="^")e.face=-e.face;
-      }
-    }
-    if(driving()){
-      if(!overlap(car,e))continue;
-      if(Math.abs(car.vx)>90){
-        const pushed=Math.sign(car.vx);
-        damage(e,e.type==="big"?60:999);carDamage(RAM_COST[e.type]);shake=.15;
-        burst(e.x+e.w/2,e.y+e.h/2,"#c94a43",8,.8);
-        if(e.alive){car.vx=-pushed*200;car.vy=-160;e.x+=pushed*12;}
-        if(e.alive||!car.drive)continue;
-        car.vx*=.85;texts.push({x:e.x+e.w/2,y:e.y-6,s:"Таран!",life:.8});
-      }else if(car.touch<=0){car.touch=.6;carDamage(5);}
-      continue;
-    }
-    if(p.x<e.x+e.w&&p.x+p.w>e.x&&p.y<e.y+e.h&&p.y+p.h>e.y){
-      if(p.vy>0&&p.y+p.h-e.y<16){damage(e,CFG.stomp);p.vy=keys.jump?-560:-420;}
-      else if(hurtP(CFG.dmg[e.type],{from:e.x+e.w/2}))return;
-    }
+    if(e.type==="crow")crowAI(e);else groundAI(e,G);
+    if(!e.alive)continue;
+    if(e.y>VIEW_H+80){e.alive=false;e.state="dead";e.dead=9;continue;}
+    if(contact(e)||st.hp<=0)return;
   }
+  // psi damage soaks in over a second instead of landing at once
+  if(st.psi>0){const d=Math.min(st.psi,12*dt);st.psi-=d;if(drain(d))return;}
+  fx.psi=Math.max(0,(fx.psi||0)-dt);
   for(const q of particles){q.vy+=900*dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.life-=dt;}
   particles=particles.filter(q=>q.life>0);
 
@@ -1099,7 +1261,7 @@ function crowLocal(e){
   ctx.fillStyle=flash?"#eee":"#2a2a34";ctx.beginPath();ctx.moveTo(-3,-9);ctx.lineTo(-7,-9-10*f);ctx.lineTo(4,-9);ctx.fill();
 }
 function stalkerLocal(e){
-  const moving=!e.alert&&e.alive, step=moving?Math.sin(time*12+e.x*.1)*2.5:0, flash=e.hit>0;
+  const moving=e.alive&&Math.abs(e.vx)>1, step=moving?Math.sin(time*12+e.x*.1)*2.5:0, flash=e.hit>0;
   ctx.fillStyle="#1b1b1b";ctx.fillRect(-8,-6+step,7,6);ctx.fillRect(1,-6-step,7,6);
   ctx.fillStyle=flash?"#fff":"#3a332c";rr(-10,-18,20,13,4);ctx.fill();
   ctx.fillStyle=flash?"#eee":"#2e2924";ctx.fillRect(-10,-8,20,3);
@@ -1175,20 +1337,75 @@ function drawCar(){
   }
 }
 const touchUI=matchMedia("(pointer:coarse)").matches;
+function snorkLocal(e){
+  const ph=time*14+e.x*.1, air=!e.onGround, flash=e.hit>0, a=air?4:Math.sin(ph)*2.5;
+  const cloth=flash?"#fff":"#5d5a4e", dk="#2e2b26";
+  ctx.strokeStyle=dk;ctx.lineWidth=2.6;ctx.lineCap="round";
+  for(const [x,o] of [[-10,a],[-5,-a],[6,a],[10,-a]]){ctx.beginPath();ctx.moveTo(x,-8);ctx.lineTo(x+o+(air?(x<0?-5:5):0),air?-3:0);ctx.stroke();}
+  ctx.fillStyle=cloth;ctx.beginPath();ctx.ellipse(-1,-9,12,5,air?-.15:0,0,7);ctx.fill();
+  ctx.fillStyle=flash?"#eee":"#4a473d";ctx.fillRect(-8,-12,5,3);ctx.fillRect(1,-13,4,2);
+  ctx.fillStyle=flash?"#fff":"#2a2d2b";ctx.beginPath();ctx.arc(11,-10,5,0,7);ctx.fill();
+  ctx.fillStyle="#9aa89a";ctx.beginPath();ctx.arc(13,-11,1.6,0,7);ctx.arc(10.5,-12.5,1.4,0,7);ctx.fill();
+  ctx.strokeStyle="#4a4a44";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(14,-8);ctx.quadraticCurveTo(15,-3,10,-4);ctx.stroke();
+}
+function bloodsuckerLocal(e){
+  const ph=time*9+e.x*.1, moving=Math.abs(e.vx)>1, step=moving?Math.sin(ph)*3:0, flash=e.hit>0;
+  const skin=flash?"#fff":"#a88a7a", dk="#5a4a44";
+  ctx.fillStyle=dk;ctx.fillRect(-6,-12+step,5,12);ctx.fillRect(1,-12-step,5,12);
+  ctx.fillStyle=skin;rr(-7,-27,14,16,5);ctx.fill();
+  ctx.strokeStyle=skin;ctx.lineWidth=3;ctx.lineCap="round";
+  const reach=e.state==="attack"?8:0;
+  ctx.beginPath();ctx.moveTo(4,-23);ctx.lineTo(10+reach,-16);ctx.moveTo(-4,-23);ctx.lineTo(-7,-13);ctx.stroke();
+  ctx.fillStyle=flash?"#fff":"#b89a8a";ctx.beginPath();ctx.ellipse(2,-31,6.5,6,0,0,7);ctx.fill();
+  ctx.fillStyle="#ff3020";ctx.shadowColor="#ff3020";ctx.shadowBlur=e.state==="attack"?8:0;
+  ctx.beginPath();ctx.arc(5,-33,1.4,0,7);ctx.arc(1.5,-33.5,1.2,0,7);ctx.fill();ctx.shadowBlur=0;
+  ctx.strokeStyle="#7a3a3a";ctx.lineWidth=1.4;
+  for(let i=0;i<4;i++){const w=Math.sin(time*8+i)*2;ctx.beginPath();ctx.moveTo(5,-28);ctx.quadraticCurveTo(7+i,-24+w,4+i*1.5,-20+w);ctx.stroke();}
+}
+function controllerLocal(e){
+  const ph=time*5+e.x*.1, moving=Math.abs(e.vx)>1, step=moving?Math.sin(ph)*2:0, flash=e.hit>0;
+  const charging=e.state==="attack";
+  ctx.fillStyle="#2e2b22";ctx.fillRect(-6,-11+step,5,11);ctx.fillRect(1,-11-step,5,11);
+  ctx.fillStyle=flash?"#fff":"#4a4636";rr(-8,-24,15,14,4);ctx.fill();
+  ctx.fillStyle=flash?"#eee":"#3a372a";ctx.fillRect(-8,-15,15,3);ctx.fillRect(-3,-21,3,6);
+  ctx.strokeStyle=flash?"#fff":"#c4ae94";ctx.lineWidth=3;ctx.lineCap="round";ctx.beginPath();
+  if(charging){ctx.moveTo(4,-21);ctx.lineTo(8,-30);ctx.moveTo(-5,-21);ctx.lineTo(-4,-31);}
+  else{ctx.moveTo(4,-21);ctx.lineTo(7,-12);ctx.moveTo(-5,-21);ctx.lineTo(-7,-12);}
+  ctx.stroke();
+  ctx.fillStyle=flash?"#fff":"#c4ae94";ctx.beginPath();ctx.ellipse(2,-31,9.5,8.5,0,0,7);ctx.fill();
+  ctx.strokeStyle="rgba(120,60,60,.55)";ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(-4,-36);ctx.lineTo(0,-33);ctx.lineTo(-2,-29);ctx.moveTo(5,-37);ctx.lineTo(7,-33);ctx.stroke();
+  ctx.fillStyle=charging?"#e0a8ff":"#1d1a14";if(charging){ctx.shadowColor="#c070ff";ctx.shadowBlur=10;}
+  ctx.beginPath();ctx.arc(6,-31,1.5,0,7);ctx.arc(2,-31,1.5,0,7);ctx.fill();ctx.shadowBlur=0;
+}
 function drawEnemy(e){
   ctx.save();
   ctx.translate(e.x+e.w/2,e.y+e.h);
   if(!e.alive){ctx.globalAlpha=Math.max(0,1-e.dead/.5);ctx.translate(0,e.dead*20);ctx.rotate(-e.face*e.dead*3);}
+  // a stalking bloodsucker is only a shimmer until it strikes or gets hit
+  const cloaked=e.type==="bloodsucker"&&e.alive&&e.state!=="attack"&&e.reveal<=0&&e.hit<=0;
+  if(cloaked)ctx.globalAlpha=.1+.06*Math.sin(time*7+e.x);
+  // boar about to charge: paws the ground
+  if(e.state==="detect"&&(e.type==="boar"||e.type==="big"))ctx.translate(Math.sin(time*40)*1.5,0);
   if(e.type==="big"){const S=e.w/30;ctx.scale(e.face*S,S);boarLocal(e);}
   else{ctx.scale(e.face,1);
-    if(e.type==="boar")boarLocal(e);else if(e.type==="dog")dogLocal(e);else if(e.type==="crow")crowLocal(e);else if(e.type==="rat")ratLocal(e);else stalkerLocal(e);}
+    switch(e.type){
+      case "boar":boarLocal(e);break;case "dog":dogLocal(e);break;case "crow":crowLocal(e);break;case "rat":ratLocal(e);break;
+      case "snork":snorkLocal(e);break;case "bloodsucker":bloodsuckerLocal(e);break;case "controller":controllerLocal(e);break;
+      default:stalkerLocal(e);
+    }}
   ctx.restore();
   if(!e.alive)return;
+  if(e.type==="controller"&&e.state==="attack"){
+    const k=1-e.st/CFG.enemies.controller.charge;
+    ctx.strokeStyle=`rgba(200,120,255,${.25+.5*k})`;ctx.lineWidth=2;
+    for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(e.x+e.w/2,e.y+4,8+((time*40+i*12)%36),0,7);ctx.stroke();}
+  }
+  if(cloaked)return;
   {
     if(e.hp<e.max||e.type==="big"){ctx.fillStyle="rgba(0,0,0,.5)";ctx.fillRect(e.x,e.y-9,e.w,3);
       ctx.fillStyle="#d9493f";ctx.fillRect(e.x,e.y-9,e.w*e.hp/e.max,3);}
   }
-  if(e.type==="stalker"&&e.alert){ctx.fillStyle="#ff5a4a";ctx.font="bold 13px system-ui, sans-serif";ctx.textAlign="center";ctx.fillText("!",e.x+e.w/2,e.y-12);}
+  if(e.state==="detect"||e.type==="stalker"&&e.state==="attack"){ctx.fillStyle="#ff5a4a";ctx.font="bold 13px system-ui, sans-serif";ctx.textAlign="center";ctx.fillText("!",e.x+e.w/2,e.y-12);}
 }
 
 // ---------- terrain drawing ----------
@@ -1250,8 +1467,9 @@ function draw(){
   if(!L.sub){ctx.fillStyle="rgba(122,125,90,.3)";ctx.fillRect(0,VIEW_H-140,viewW,140);}
   midLayer();
 
-  const sk=shake>0?shake/.3:0;
-  ctx.save();ctx.translate(-Math.round(camX)+(Math.random()-.5)*10*sk,(Math.random()-.5)*8*sk);
+  const sk=shake>0?shake/.3:0, ps=Math.min(1,fx.psi||0);
+  ctx.save();ctx.translate(-Math.round(camX)+(Math.random()-.5)*10*sk+Math.sin(time*9)*6*ps,(Math.random()-.5)*8*sk+Math.cos(time*7)*4*ps);
+  if(ps){ctx.translate(camX+viewW/2,VIEW_H/2);ctx.rotate(Math.sin(time*3)*.03*ps);ctx.translate(-camX-viewW/2,-VIEW_H/2);}
   const c0=Math.max(0,Math.floor(camX/T)), c1=Math.min(L.w-1,Math.ceil((camX+viewW)/T));
   if(terr){drawGround(c0,c1);drawRamps(camX-T,camX+viewW+T);}
   for(let r=0;r<ROWS;r++)for(let c=c0;c<=c1;c++){
@@ -1425,6 +1643,7 @@ function draw(){
   vg.addColorStop(0,"rgba(0,0,0,0)");vg.addColorStop(1,"rgba(0,0,0,.35)");
   ctx.fillStyle=vg;ctx.fillRect(0,0,viewW,VIEW_H);
   if(fx.hit>0){ctx.fillStyle=`rgba(200,30,20,${fx.hit*.55})`;ctx.fillRect(0,0,viewW,VIEW_H);}
+  if(fx.psi>0){const k=Math.min(1,fx.psi);ctx.fillStyle=`rgba(120,40,170,${.28*k+.08*Math.sin(time*11)*k})`;ctx.fillRect(0,0,viewW,VIEW_H);}
   if(st.hp>0&&st.hp<25){
     const k=.35+.15*Math.sin(time*5);
     const rv=ctx.createRadialGradient(viewW/2,VIEW_H/2,VIEW_H*.35,viewW/2,VIEW_H/2,Math.max(viewW,VIEW_H)*.75);
