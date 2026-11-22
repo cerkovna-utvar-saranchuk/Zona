@@ -40,8 +40,9 @@ body{background:var(--ground);color:var(--text);font-family:var(--body);overflow
 .hudbtn:disabled{opacity:.45}
 .stage{position:relative;min-height:0;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--stage)}
 canvas{display:block;width:100%;height:100%;touch-action:none}
-.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+.overlay{position:fixed;inset:0;z-index:10;display:flex;align-items:safe center;justify-content:center;overflow-y:auto;touch-action:pan-y;
   background:rgba(18,20,15,.66);backdrop-filter:blur(3px);padding:16px}
+@media (max-height:700px){.overlay{padding:8px}.card{padding:14px 16px;gap:9px}.card h1{font-size:20px}.card p{font-size:13px;line-height:1.35}.btn{padding:10px 14px}}
 .card{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--rad);border-radius:12px;padding:20px 22px;
   max-width:350px;width:100%;text-align:center;display:flex;flex-direction:column;gap:12px}
 .card h1{font-family:var(--display);font-weight:400;font-size:25px;margin:0;text-wrap:balance;color:var(--rad);letter-spacing:.02em}
@@ -124,6 +125,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .car-ico{font:400 11px var(--display);color:#cfd6a8}
 .hint{font-size:12px;color:var(--muted);text-align:center}
 @media (pointer:coarse){.pad{display:flex}.hint{display:none}}
+@media (max-width:360px){.pad{gap:6px}.pad .grp{gap:6px}.pad .dirs button{width:50px}.pad .acts{grid-template-columns:repeat(3,52px);gap:6px}.pad .act{font-size:10px}}
 </style>
 
 <div id="app">
@@ -158,7 +160,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
     <div class="overlay" id="ov">
       <div class="card">
         <h1 id="ovTitle">Зона відчуження</h1>
-        <p id="ovText">Шість локацій від Залісся до ЧАЕС. Збирай артефакти, обходь аномалії, відстрілюй мутантів і ворожих сталкерів. З полеглих сталкерів падають гранати, а в Прип'яті є відкритий люк. Кинь болт в аномалію, і вона згасне на 5 секунд. Зелені ліхтарі — контрольні точки, гра зберігається сама. Сідай у старий УАЗ, тарань мутантів, перелітай ями з трамплінів. Шукай схованки, продавай артефакти торговцю, а коли КПК попередить про викид — біжи в укриття.</p>
+        <p id="ovText">Шість локацій від Залісся до ЧАЕС. Стріляй, кидай болти в аномалії, тарань мутантів на УАЗі й перелітай ями з трамплінів. Шукай схованки, продавай артефакти, а коли КПК попередить про викид — біжи в укриття.</p>
         <div class="diff" id="diff" hidden role="radiogroup" aria-label="Складність"></div>
         <button class="btn" id="ovBtn">Увійти в Зону</button>
         <button class="btn ghost" id="ovBtn2" hidden></button>
