@@ -83,7 +83,33 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
   touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:pointer}
 .wpanel button small{font:800 12px var(--body);color:var(--muted);font-variant-numeric:tabular-nums}
 .wpanel button.cur{border-color:var(--rad);box-shadow:inset 0 0 0 1px var(--rad)}
-.mute{background:var(--panel);border-color:var(--line);color:var(--text)}
+.mute,.bag{background:var(--panel);border-color:var(--line);color:var(--text)}
+.radstat{color:var(--rad)}
+.radstat.hot{color:#ff8a3a}
+.bleedstat{color:#ff8a7a}
+.inv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:10px;background:rgba(18,20,15,.7);z-index:4}
+.invcard{width:100%;max-width:460px;max-height:100%;display:flex;flex-direction:column;background:var(--panel);
+  border:1px solid var(--line);border-top:4px solid var(--rad);border-radius:12px;overflow:hidden}
+.invhead{display:flex;align-items:center;gap:10px;padding:10px 12px 6px}
+.invhead b{font:400 18px var(--display);color:var(--rad);flex:1}
+.invhead span{font-weight:800;font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px}
+.invhead span.over{color:#ff8a7a}
+.invx{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:8px;width:34px;height:30px;font-size:15px;cursor:pointer}
+.invstat{display:flex;flex-wrap:wrap;gap:4px 14px;padding:0 12px 8px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.invstat b{color:var(--text)}
+.tabs{display:flex;gap:6px;padding:0 12px 8px}
+.tabs button{flex:1;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;padding:6px;font:400 13px var(--display);cursor:pointer}
+.tabs button.on{background:var(--line);color:var(--text)}
+.invlist{overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;padding:0 12px 12px;min-height:0}
+.invlist h3{font:400 12px var(--display);letter-spacing:.08em;color:var(--muted);margin:10px 0 4px;text-transform:uppercase}
+.row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(63,70,54,.6);font-size:14px}
+.row .nm{flex:1;min-width:0}
+.row .nm small{display:block;color:var(--muted);font-size:12px}
+.row .ct{font-weight:800;font-variant-numeric:tabular-nums;min-width:34px;text-align:right}
+.row .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.row button{border:1px solid var(--line);background:var(--ground);color:var(--text);border-radius:8px;padding:6px 10px;font:800 12px var(--body);cursor:pointer;touch-action:manipulation}
+.row button:disabled{opacity:.4}
+.row button.cur{border-color:var(--rad);color:var(--rad)}
 .pad .car.on{background:#3a4230}
 .carbar{width:46px;height:7px;border-radius:4px;background:var(--line);overflow:hidden}
 .carbar i{display:block;height:100%;width:100%;background:#7fd36a}
@@ -102,6 +128,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <div class="stat" title="Знищено ворогів"><span class="pig-ico" aria-hidden="true">✕</span><span id="kills">0</span></div>
       <div class="stat wstat" title="Зброя і патрони"><span id="wName">АК-74</span><b id="wAmmo">30/60</b></div>
       <div class="stat" title="Гранати"><span class="nade-ico" aria-hidden="true"></span><span id="nades">1</span></div>
+      <div class="stat radstat" id="radStat" title="Радіація" hidden>☢ <span id="radNum">0</span></div>
+      <div class="stat bleedstat" id="bleedStat" title="Кровотеча — потрібен бинт" hidden>🩸<span id="bleedNum"></span></div>
+      <button class="hudbtn bag" id="bInv" title="Рюкзак (I)" aria-label="Відкрити рюкзак">🎒</button>
       <button class="hudbtn mute" id="bMute" title="Звук (M)" aria-label="Увімкнути або вимкнути звук">🔊</button>
       <div class="stat" id="carStat" title="Стан УАЗа" hidden><span class="car-ico">УАЗ</span><span class="carbar"><i id="carBar"></i></span></div>
     </div>
@@ -109,6 +138,14 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
   <div class="stage">
     <canvas id="c" aria-label="Ігрове поле"></canvas>
     <div class="wpanel" id="wpanel" hidden aria-label="Вибір зброї"></div>
+    <div class="inv" id="inv" hidden>
+      <div class="invcard" role="dialog" aria-label="Рюкзак">
+        <div class="invhead"><b id="invTitle">Рюкзак</b><span id="invW"></span><button class="invx" id="invClose" aria-label="Закрити">✕</button></div>
+        <div class="invstat" id="invStat"></div>
+        <div class="tabs" id="invTabs"><button data-tab="items" class="on">Речі</button><button data-tab="pda">КПК</button></div>
+        <div class="invlist" id="invList"></div>
+      </div>
+    </div>
     <div class="overlay" id="ov">
       <div class="card">
         <h1 id="ovTitle">Зона відчуження</h1>
@@ -143,7 +180,7 @@ const CFG={
   player:{maxHp:100, invuln:.6, knockX:230, knockY:260},
   // damage dealt to the stalker, HP
   // environment damage, HP (monsters carry their own damage below)
-  dmg:{bandit:15, electra:30, explosion:40, fall:35, acid:35},
+  dmg:{bandit:15, explosion:40, fall:35, acid:35},
   // detect: how far they notice you, range: when they attack, recover: pause after an attack.
   // small: the UAZ runs them over; ramCost: what ramming them costs the car.
   enemies:{
@@ -157,7 +194,16 @@ const CFG={
     rat:{name:"Щур", hp:15, w:20, h:12, speed:70, chase:130, detect:170, detectT:.15, range:28, dmg:6, recover:.5, small:true, ramCost:3, flee:true},
     crow:{name:"Ворона", hp:20, w:22, h:14, detect:180, dmg:8, recover:1.6, small:true, ramCost:2}
   },
-  heal:{medkit:40},
+  heal:{medkit:40, bandage:10, antirad:60, repair:50},
+  // radiation 0..100: zones add their strength per second; above a threshold it eats HP
+  rad:{decay:.25, hurt:[[80,3.5],[50,1.2]]},
+  bleed:{perLevel:.8, max:3},
+  anomaly:{
+    electra:{dmg:30, cycle:3.5, active:2.2, carDmg:15},
+    fire:{dmg:25, cycle:2.6, burst:.9, height:72, carDmg:12},
+    gravity:{dmg:20, radius:3.2, pull:150, carPull:90, carDmg:10, reveal:6}
+  },
+  weightMax:40, overloadSpeed:.72,
   // falloff:[full-damage distance, zero-point distance, minimum share]
   weapons:{
     pm:{name:"ПМ", ammo:"9x18", mag:8, dmg:18, pellets:1, rate:.22, auto:false, reload:.9, spread:.015, speed:760, range:420, recoil:1.2, kick:50},
@@ -170,8 +216,26 @@ const CFG={
   difficulty:{easy:{name:"Новачок",dmg:.6}, normal:{name:"Сталкер",dmg:1}, hard:{name:"Ветеран",dmg:1.4}}
 };
 const WEAPON_ORDER=["pm","sg","ak","nade"];
-const freshSt=()=>({hp:CFG.player.maxHp, cur:"ak", wpn:{pm:{mag:8},sg:{mag:2},ak:{mag:30}},
-  items:{medkit:2, grenade:2, "9x18":32, "12x70":10, "5.45x39":60}});
+// everything the stalker can carry: weight in kg, val = what a trader pays
+const ITEMS={
+  medkit:{name:"Аптечка", short:"аптечка", w:.4, use:true, desc:"+40 HP"},
+  bandage:{name:"Бинт", short:"бинт", w:.1, use:true, desc:"Зупиняє кровотечу, +10 HP"},
+  antirad:{name:"Антирад", short:"антирад", w:.2, use:true, desc:"Виводить радіацію"},
+  repair:{name:"Ремкомплект", short:"ремкомплект", w:1.5, use:true, desc:"Лагодить УАЗ (+50)"},
+  grenade:{name:"Граната РГД-5", short:"гран.", w:.4},
+  "9x18":{name:"Набої 9×18 (ПМ)", short:"набоїв 9×18", w:.01},
+  "12x70":{name:"Набої 12/70 (обріз)", short:"набоїв 12 кал.", w:.04},
+  "5.45x39":{name:"Набої 5,45×39 (АК)", short:"набоїв 5,45", w:.012},
+  art0:{name:"Медуза", short:"Медуза", w:.1, val:40, col:"#8fe0d0", art:true},
+  art1:{name:"Вогняна куля", short:"Вогняна куля", w:.1, val:60, col:"#f2a640", art:true},
+  art2:{name:"Нічна зірка", short:"Нічна зірка", w:.1, val:80, col:"#c78bff", art:true},
+  art3:{name:"Кам'яна квітка", short:"Кам'яна квітка", w:.1, val:50, col:"#7fd36a", art:true},
+  art4:{name:"Душа", short:"Душа", w:.1, val:120, col:"#ff6f61", art:true}
+};
+const WEAPON_W={pm:.7, sg:2.4, ak:3.3};
+const freshSt=()=>({hp:CFG.player.maxHp, rad:0, bleed:0, cur:"ak", wpn:{pm:{mag:8},sg:{mag:2},ak:{mag:30}},
+  items:{medkit:2, bandage:2, antirad:1, repair:1, grenade:2, "9x18":32, "12x70":10, "5.45x39":60}});
+const carried=()=>Object.entries(st.items).reduce((s,[k,n])=>s+(ITEMS[k]?ITEMS[k].w*n:0),0)+Object.values(WEAPON_W).reduce((a,b)=>a+b,0);
 const clone=o=>JSON.parse(JSON.stringify(o));
 const ART_COLORS=["#8fe0d0","#f2a640","#c78bff","#7fd36a","#ff6f61"];
 const THEMES={
@@ -187,37 +251,37 @@ const THEMES={
 // Ground is a height map: hills are [col, widthCols, heightPx]; pits get an automatic ramp in front of them,
 // wagons ("W") get one on their left side so the UAZ can drive up.
 const LEVELS=[
- {name:"Залісся", items:[[13,"medkit"]], theme:"village", w:66, gaps:[[16,3],[29,3],[45,3]],
+ {name:"Залісся", items:[[13,"medkit"],[40,"bandage"]], theme:"village", w:66, gaps:[[16,3],[29,3],[45,3]],
   hills:[[8,4,36],[20,5,44],[32,4,30],[51,6,60]],
-  blocks:[["^",37,9,2]],
+  rad:[[57,3,5]], blocks:[["F",60,9,1],["^",37,9,2]],
   gems:[[6,8],[8,7],[17,7],[18,7],[22,6],[23,6],[30,7],[34,6],[38,6],[46,7],[53,6],[54,6],[60,8]],
   enemies:[[22,9,"dog"],[24,9,"dog"],[34,9,"boar"],[58,9,"stalker"],[27,4,"crow"]], start:2, cps:[33], flag:63, car:5},
- {name:"Рудий ліс", items:[[30,"medkit"],[60,"medkit"]], theme:"forest", w:80, gaps:[[12,3],[22,3],[33,4],[50,3],[64,3]],
+ {name:"Рудий ліс", items:[[30,"medkit"],[60,"medkit"],[39,"bandage"],[67,"antirad"]], theme:"forest", w:80, gaps:[[12,3],[22,3],[33,4],[50,3],[64,3]],
   hills:[[5,3,40],[15,3,30],[25,4,40],[53,6,72]],
-  blocks:[["^",42,9,2],["^",68,9,2]],
+  rad:[[56,4,8]], blocks:[["F",44,9,1],["V",73,9,1],["^",42,9,2],["^",68,9,2]],
   gems:[[6,7],[13,7],[16,7],[19,7],[23,7],[26,6],[28,6],[34,7],[35,7],[40,7],[45,7],[51,7],[56,5],[65,7],[72,8]],
   enemies:[[18,9,"boar"],[28,9,"dog"],[29,9,"dog"],[40,9,"stalker"],[47,9,"snork"],[71,9,"stalker"],[75,9,"dog"],[76,9,"dog"],[20,4,"crow"],[47,3,"crow"]], start:2, cps:[39], flag:77, car:2},
- {name:"Прип'ять", items:[[27,"medkit"],[70,"medkit"]], theme:"town", w:90, gaps:[[10,3],[20,3],[30,4],[45,3],[56,4],[72,3]],
+ {name:"Прип'ять", items:[[27,"medkit"],[70,"medkit"],[35,"antirad"],[49,"repair"]], theme:"town", w:90, gaps:[[10,3],[20,3],[30,4],[45,3],[56,4],[72,3]],
   hills:[[23,3,36],[60,3,30],[79,4,60]],
-  blocks:[["^",14,9,2],["^",37,9,2],["^",65,9,2]],
+  rad:[[34,3,10],[75,4,10]], blocks:[["F",48,9,1],["V",86,9,1],["^",14,9,2],["^",37,9,2],["^",65,9,2]],
   gems:[[11,7],[15,7],[21,7],[24,6],[25,6],[31,7],[32,7],[39,7],[43,7],[46,7],[57,7],[58,7],[61,6],[67,7],[73,7],[80,6],[81,6]],
   enemies:[[17,9,"dog"],[25,9,"stalker"],[39,9,"snork"],[50,9,"stalker"],[53,9,"bloodsucker"],[76,9,"dog"],[78,9,"snork"],[84,9,"bloodsucker"],[34,4,"crow"],[60,4,"crow"]], start:2, cps:[49], flag:88, hatch:{col:63,ret:77}, car:3},
- {name:"Станція Янів", items:[[37,"medkit"],[60,"medkit"]], theme:"rail", w:100, gaps:[[14,3],[31,3],[42,4],[64,3],[72,3],[89,3]],
-  blocks:[["W",21,8,6],["W",21,9,6],["W",52,8,5],["W",52,9,5],["^",58,9,2],["W",79,8,4],["W",79,9,4],["^",83,9,2]],
+ {name:"Станція Янів", items:[[37,"medkit"],[60,"medkit"],[47,"repair"],[93,"antirad"]], theme:"rail", w:100, gaps:[[14,3],[31,3],[42,4],[64,3],[72,3],[89,3]],
+  rad:[[92,4,12]], blocks:[["F",35,9,1],["V",7,9,1],["W",21,8,6],["W",21,9,6],["W",52,8,5],["W",52,9,5],["^",58,9,2],["W",79,8,4],["W",79,9,4],["^",83,9,2]],
   gems:[[10,7],[15,7],[22,6],[25,6],[32,7],[36,7],[43,6],[44,7],[53,6],[55,6],[65,7],[68,7],[73,7],[80,6],[86,7],[90,7],[94,8]],
-  enemies:[[12,9,"dog"],[13,9,"dog"],[23,7,"stalker"],[35,9,"stalker"],[47,9,"boar"],[54,7,"dog"],[67,9,"snork"],[93,9,"stalker"],[95,9,"bloodsucker"],[33,4,"crow"],[66,4,"crow"]],
+  enemies:[[12,9,"dog"],[13,9,"dog"],[23,7,"stalker"],[36,9,"stalker"],[47,9,"boar"],[54,7,"dog"],[67,9,"snork"],[93,9,"stalker"],[95,9,"bloodsucker"],[33,4,"crow"],[66,4,"crow"]],
   start:2, cps:[46], flag:97, car:4},
- {name:"Радар «Дуга»", items:[[41,"medkit"],[70,"medkit"]], theme:"duga", w:105, gaps:[[12,3],[22,4],[36,3],[46,4],[62,3],[74,4],[90,3]],
+ {name:"Радар «Дуга»", items:[[41,"medkit"],[70,"medkit"],[57,"antirad"],[31,"repair"]], theme:"duga", w:105, gaps:[[12,3],[22,4],[36,3],[46,4],[62,3],[74,4],[90,3]],
   hills:[[27,4,40],[51,5,56],[78,4,48]],
-  blocks:[["^",66,9,2],["^",83,9,2],["^",96,9,2]],
+  rad:[[56,2,14],[93,3,14]], blocks:[["F",40,9,1],["V",16,9,1],["^",66,9,2],["^",83,9,2],["^",96,9,2]],
   gems:[[9,8],[13,7],[16,7],[18,7],[23,7],[24,7],[25,7],[28,6],[30,6],[37,7],[40,7],[44,7],[47,7],[48,7],[53,5],[57,7],[63,7],[67,7],[70,7],[75,7],[76,7],[79,6],[85,7],[91,7],[97,7],[99,7]],
-  enemies:[[8,9,"dog"],[18,9,"stalker"],[32,9,"snork"],[40,9,"stalker"],[43,9,"snork"],[55,9,"controller"],[70,9,"stalker"],[68,9,"bloodsucker"],[86,9,"boar"],[94,9,"controller"],[16,4,"crow"],[50,3,"crow"],[78,3,"crow"]],
+  enemies:[[8,9,"dog"],[18,9,"stalker"],[32,9,"snork"],[39,9,"stalker"],[43,9,"snork"],[55,9,"controller"],[70,9,"stalker"],[68,9,"bloodsucker"],[86,9,"boar"],[94,9,"controller"],[16,4,"crow"],[50,3,"crow"],[78,3,"crow"]],
   start:2, cps:[54], flag:102, car:4},
- {name:"ЧАЕС", items:[[35,"medkit"],[62,"medkit"],[97,"medkit"]], theme:"npp", w:115, gaps:[[10,3],[20,3],[30,4],[47,3],[58,4],[76,3],[86,4],[100,3]],
+ {name:"ЧАЕС", items:[[34,"medkit"],[62,"medkit"],[97,"medkit"],[67,"repair"],[103,"bandage"],[108,"antirad"]], theme:"npp", w:115, gaps:[[10,3],[20,3],[30,4],[47,3],[58,4],[76,3],[86,4],[100,3]],
   hills:[[23,3,40],[50,4,36],[63,3,30],[79,3,50],[104,3,56]],
-  blocks:[["^",14,9,2],["^",38,9,2],["^",68,9,2],["^",93,9,2]],
+  rad:[[90,3,16],[107,4,12]], blocks:[["F",41,9,1],["F",70,9,1],["V",35,9,1],["^",14,9,2],["^",38,9,2],["^",68,9,2],["^",93,9,2]],
   gems:[[11,7],[15,6],[21,7],[24,6],[25,6],[31,7],[32,7],[35,7],[41,7],[44,7],[48,7],[52,6],[59,7],[60,7],[64,6],[70,7],[72,7],[77,7],[80,6],[87,7],[96,7],[101,7],[105,6]],
-  enemies:[[6,9,"dog"],[7,9,"dog"],[17,9,"stalker"],[27,9,"snork"],[36,9,"stalker"],[41,9,"bloodsucker"],[50,9,"dog"],[56,9,"stalker"],[66,9,"boar"],[71,9,"controller"],
+  enemies:[[6,9,"dog"],[7,9,"dog"],[17,9,"stalker"],[27,9,"snork"],[37,9,"stalker"],[42,9,"bloodsucker"],[50,9,"dog"],[56,9,"stalker"],[66,9,"boar"],[71,9,"controller"],
            [80,9,"snork"],[84,9,"dog"],[91,9,"stalker"],[109,9,"big"],[25,3,"crow"],[45,3,"crow"],[62,3,"crow"],[90,3,"crow"]],
   start:2, cps:[37,66], flag:112, bossHp:400, car:2}
 ];
@@ -241,8 +305,8 @@ window.addEventListener("resize",resize);
 const rnd=n=>{const s=Math.sin(n*12.9898+78.233)*43758.5453;return s-Math.floor(s);};
 
 // ---------- state ----------
-let L, TH, grid, gems, enemies, bullets, ebullets, particles, p, camX=0, lvlIdx=0, st=freshSt(), levelStart=null, fx={hit:0}, saveT=0, settings={diff:"normal"}, gemTotal=0, kills=0, running=false, time=0, cpCol=2, grenades=[], pickups=[], booms=[], texts=[], shake=0, gReq=false, banner="", bannerT=0, saved=null, bolts=[], bReq=false, boltCd=0, quiet={}, car=null, cReq=false, fireReq=false, rReq=false;
-const CAR_MAX=100;
+let L, TH, grid, gems, enemies, bullets, ebullets, particles, p, camX=0, lvlIdx=0, st=freshSt(), levelStart=null, fx={hit:0}, saveT=0, settings={diff:"normal"}, gemTotal=0, kills=0, running=false, time=0, cpCol=2, grenades=[], pickups=[], booms=[], texts=[], shake=0, gReq=false, banner="", bannerT=0, saved=null, bolts=[], bReq=false, boltCd=0, quiet={}, car=null, cReq=false, fireReq=false, rReq=false, anoms=[];
+const CAR_MAX=100;CFG.car={max:CAR_MAX};
 const driving=()=>car&&car.drive;
 const body=()=>driving()?car:p;
 const isQuiet=(c,r)=>(quiet[c+","+r]||0)>time;
@@ -265,7 +329,7 @@ function buildLevel(def){
   gems=L.gems.map(([c,r],k)=>{
     let y=r*T+16;
     if(terr){const s=Math.min(surf(c*T+16),BASE);y=Math.min(Math.max(y,s-125),s-18);}
-    return {x:c*T+16,y,taken:false,col:ART_COLORS[k%ART_COLORS.length],ph:k};
+    return {x:c*T+16,y,taken:false,k:k%ART_COLORS.length,col:ART_COLORS[k%ART_COLORS.length],ph:k};
   });
   enemies=L.enemies.map(([c,r,type],k)=>{
     const d=CFG.enemies[type], hp=type==="big"&&L.bossHp?L.bossHp:d.hp;
@@ -276,6 +340,11 @@ function buildLevel(def){
     return e;
   });
   pickups=(L.items||[]).map(([c,kind])=>({kind,n:1,x:c*T+11,y:topAt(c*T+16,2)-12,vy:0,map:L.name+":"+c}));pickedMap=[];
+  // contiguous anomaly tiles form one anomaly with its own rhythm
+  anoms=[];
+  for(let r=0;r<ROWS;r++)for(let c=0;c<L.w;c++){const t=grid[r][c];
+    if(isHazard(t)&&tile(c-1,r)!==t){let e=c;while(tile(e+1,r)===t)e++;
+      anoms.push({t,r,c0:c,c1:e,x0:c*T,x1:(e+1)*T,cx:(c+e+1)/2*T,ph:rnd(c*7+r)*5,reveal:0,cool:0});}}
   bullets=[];particles=[];grenades=[];booms=[];texts=[];bolts=[];quiet={};cpCol=L.start;
   car=L.car!=null?{x:L.car*T,y:topAt(L.car*T+32,2)-34,ang:0,w:64,h:34,vx:0,vy:0,onGround:false,coyote:0,face:1,wr:0,hp:CAR_MAX,hit:0,touch:0,zap:0,drive:false,wreck:false,smoke:0}:null;
   spawn();
@@ -304,7 +373,9 @@ function hud(){
   const hp=Math.max(0,Math.ceil(st.hp)), hf=st.hp/CFG.player.maxHp;
   $("hpNum").textContent=hp;
   $("hpBar").style.cssText=`width:${hf*100}%;background-color:${hf>.6?"#7fd36a":hf>.25?"#e5c33a":"#d9493f"}`;
-  $("medN").textContent=st.items.medkit;$("bMed").disabled=!st.items.medkit;
+  $("medN").textContent=st.items.medkit;$("bMed").disabled=!st.items.medkit&&!(st.bleed&&st.items.bandage);
+  $("radStat").hidden=st.rad<1;$("radNum").textContent=Math.round(st.rad);$("radStat").classList.toggle("hot",st.rad>=50);
+  $("bleedStat").hidden=!st.bleed;$("bleedNum").textContent=st.bleed>1?"×"+st.bleed:"";
   $("carStat").hidden=!driving();
   if(car)$("carBar").style.cssText=`width:${car.hp/CAR_MAX*100}%;background:${carCol(car.hp)}`;
 }
@@ -373,12 +444,16 @@ function moveY(o){
 
 // ---------- input ----------
 const keys={left:false,right:false,jump:false,fire:false,gren:false,bolt:false,car:false};
-const KMAP={ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",Space:"jump",ArrowUp:"jump",KeyW:"jump",KeyJ:"fire",KeyF:"fire",KeyX:"fire",KeyK:"fire",KeyG:"gren",KeyL:"gren",KeyB:"bolt",KeyQ:"bolt",KeyE:"car",KeyC:"car",KeyH:"med",KeyR:"reload",Digit1:"w1",Digit2:"w2",Digit3:"w3",Digit4:"w4",KeyM:"mute"};
+const KMAP={ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",Space:"jump",ArrowUp:"jump",KeyW:"jump",KeyJ:"fire",KeyF:"fire",KeyX:"fire",KeyK:"fire",KeyG:"gren",KeyL:"gren",KeyB:"bolt",KeyQ:"bolt",KeyE:"car",KeyC:"car",KeyH:"med",KeyR:"reload",Digit1:"w1",Digit2:"w2",Digit3:"w3",Digit4:"w4",KeyM:"mute",KeyI:"inv",Tab:"inv",Escape:"esc",KeyN:"bandage"};
 addEventListener("keydown",e=>{const k=KMAP[e.code];if(!k)return;e.preventDefault();
+  if(!$("inv").hidden&&k!=="inv"&&k!=="esc")return;
   if(k==="gren"&&!e.repeat)gReq=true;
   if(k==="bolt"&&!e.repeat)bReq=true;
   if(k==="car"&&!e.repeat)cReq=true;
   if(k==="med"&&!e.repeat&&running)useItem("medkit");
+  if(k==="bandage"&&!e.repeat&&running)useItem("bandage");
+  if(k==="inv"&&!e.repeat){if($("inv").hidden)openInv();else closeInv();}
+  if(k==="esc"&&!e.repeat)closeInv();
   if(k==="fire"&&!e.repeat)fireReq=true;
   if(k==="reload"&&!e.repeat)rReq=true;
   if(k==="mute"&&!e.repeat)toggleMute();
@@ -413,7 +488,7 @@ function selectWeapon(id){
   st.cur=id;if(p){p.reload=0;p.cd=Math.max(p.cd,.15);}SFX.click();hud();
 }
 const ammoText=id=>id==="nade"?`${st.items.grenade} шт.`:`${st.wpn[id].mag}/${st.items[CFG.weapons[id].ammo]}`;
-$("bMed").addEventListener("click",()=>{if(running)useItem("medkit");});
+$("bMed").addEventListener("click",()=>{if(running)useItem("quick");});
 
 // ---------- flow ----------
 let ovAction=null, ovAction2=null;
@@ -484,8 +559,24 @@ function die(){
 }
 function useItem(id){
   const it=st.items;
-  if(id==="medkit"){
+  // the quick button stops bleeding first when it can
+  if(id==="quick")id=st.bleed&&it.bandage?"bandage":"medkit";
+  if(id==="bandage"){
+    if(!it.bandage){note("Немає бинтів");return;}
+    it.bandage--;st.bleed=0;st.hp=Math.min(CFG.player.maxHp,st.hp+CFG.heal.bandage);note("Кровотечу зупинено");
+  }else if(id==="antirad"){
+    if(!it.antirad){note("Немає антираду");return;}
+    if(st.rad<1){note("Радіації немає");return;}
+    it.antirad--;st.rad=Math.max(0,st.rad-CFG.heal.antirad);note("Радіацію знижено");
+  }else if(id==="repair"){
+    if(!it.repair){note("Немає ремкомплекту");return;}
+    if(!car||!overlap(p,car,30)||driving()){note("Підійди до УАЗа");return;}
+    if(car.hp>=CFG.car.max){note("УАЗ цілий");return;}
+    it.repair--;car.hp=Math.min(CFG.car.max,car.hp+CFG.heal.repair);car.wreck=false;
+    burst(car.x+car.w/2,car.y+car.h/2,"#f3d27a",10,.5);note("УАЗ полагоджено");
+  }else if(id==="medkit"){
     if(!it.medkit){note("Немає аптечок");return;}
+    if(st.bleed&&st.hp>=CFG.player.maxHp-1){note("Потрібен бинт");return;}
     if(st.hp>=CFG.player.maxHp){note("Здоров'я повне");return;}
     it.medkit--;st.hp=Math.min(CFG.player.maxHp,st.hp+CFG.heal.medkit);
     burst(p.x+p.w/2,p.y+10,"#7fd36a",10,.5);note(`+${CFG.heal.medkit} HP`);
@@ -493,6 +584,45 @@ function useItem(id){
   hud();
 }
 const note=s=>texts.push({x:p.x+p.w/2,y:p.y-8,s,life:1});
+
+// ---------- backpack (pauses the game) ----------
+let invTab="items";
+function openInv(){if(!running||st.hp<=0)return;running=false;$("wpanel").hidden=true;$("inv").hidden=false;renderInv();}
+function closeInv(){if($("inv").hidden)return;$("inv").hidden=true;running=true;last=performance.now();}
+function renderInv(){
+  const w=carried(), it=st.items;
+  $("invW").textContent=`${w.toFixed(1)} / ${CFG.weightMax} кг`;$("invW").classList.toggle("over",w>CFG.weightMax);
+  $("invStat").innerHTML=`<span>Здоров'я <b>${Math.ceil(st.hp)}</b></span><span>Радіація <b>${Math.round(st.rad)}</b></span>`+
+    `<span>Кровотеча <b>${st.bleed?"так":"ні"}</b></span>${car?`<span>УАЗ <b>${Math.round(car.hp)}%</b></span>`:""}<span>Гроші <b>${st.money||0} ₴</b></span>`;
+  for(const b of $("invTabs").children)b.classList.toggle("on",b.dataset.tab===invTab);
+  if(invTab==="pda"){$("invList").innerHTML=pdaHtml();return;}
+  const row=(dot,name,sub,count,btn)=>`<div class="row">${dot?`<span class="dot" style="background:${dot}"></span>`:""}<div class="nm">${name}${sub?`<small>${sub}</small>`:""}</div><span class="ct">${count}</span>${btn||""}</div>`;
+  let h="<h3>Зброя</h3>";
+  for(const id of ["pm","sg","ak"]){const c=CFG.weapons[id];
+    h+=row(null,c.name,`${ITEMS[c.ammo].name} · ${WEAPON_W[id]} кг`,`${st.wpn[id].mag}/${c.mag}`,`<button data-act="w:${id}" class="${st.cur===id?"cur":""}">${st.cur===id?"В руках":"Взяти"}</button>`);}
+  h+="<h3>Спорядження</h3>";
+  for(const id of ["medkit","bandage","antirad","repair","grenade"]){const d=ITEMS[id];
+    h+=row(null,d.name,d.desc||`${d.w} кг`,it[id]||0,d.use?`<button data-act="u:${id}" ${it[id]?"":"disabled"}>Використати</button>`:"");}
+  h+="<h3>Набої</h3>";
+  for(const id of ["9x18","12x70","5.45x39"])h+=row(null,ITEMS[id].name,"",it[id]||0);
+  const arts=Object.keys(ITEMS).filter(k=>ITEMS[k].art&&it[k]);
+  h+="<h3>Артефакти</h3>"+(arts.length?arts.map(k=>row(ITEMS[k].col,ITEMS[k].name,`ціна ${ITEMS[k].val} ₴`,it[k])).join(""):`<div class="row"><div class="nm"><small>Поки порожньо</small></div></div>`);
+  $("invList").innerHTML=h;
+}
+function pdaHtml(){
+  return `<h3>Стан</h3><div class="row"><div class="nm">Локація<small>${L.name}</small></div></div>`+
+    `<div class="row"><div class="nm">Знайдено артефактів</div><span class="ct">${gemTotal}</span></div>`+
+    `<div class="row"><div class="nm">Знищено ворогів</div><span class="ct">${kills}</span></div>`;
+}
+$("bInv").addEventListener("click",()=>{if($("inv").hidden)openInv();else closeInv();});
+$("invClose").addEventListener("click",closeInv);
+$("invTabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b){invTab=b.dataset.tab;renderInv();}});
+$("invList").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-act]");if(!b)return;
+  const [k,id]=b.dataset.act.split(":");
+  if(k==="w")selectWeapon(id);else useItem(id);
+  renderInv();
+});
 function loadBest(){try{return +localStorage.getItem("zoneBest")||0}catch(_){return 0}}
 function saveBest(v){try{localStorage.setItem("zoneBest",String(v))}catch(_){}}
 
@@ -506,6 +636,7 @@ function hurtP(n,o={}){
   p.inv=CFG.player.invuln;fx.hit=.35;shake=Math.max(shake,.12);SFX.hurt();
   burst(p.x+p.w/2,Math.min(p.y+p.h/2,VIEW_H-20),"#d9493f",8,.7);
   texts.push({x:p.x+p.w/2,y:p.y-6,s:`-${n}`,life:.8,col:"#ff8a7a"});
+  if(o.bleed&&Math.random()<o.bleed&&st.bleed<CFG.bleed.max){st.bleed++;texts.push({x:p.x+p.w/2,y:p.y-20,s:"Кровотеча!",life:1.2,col:"#ff8a7a"});}
   if(o.from!=null){const d=Math.sign(p.x+p.w/2-o.from)||-p.face;p.vx=d*CFG.player.knockX;p.vy=Math.min(p.vy,-CFG.player.knockY);}
   hud();
   if(st.hp<=0){die();return true;}
@@ -537,11 +668,52 @@ function finishLevel(){
     overlay(`${L.name}: пройдено`,`Наступна локація: <span class="big">${n.name}</span><br>Знайдено аптечку: +1`,"Далі",()=>enterLevel(lvlIdx+1));
   }
 }
+const anomAt=(c,r)=>anoms.find(a=>a.r===r&&c>=a.c0&&c<=a.c1);
+const anomOn=a=>{
+  if(isQuiet(a.c0,a.r))return false;
+  const A=CFG.anomaly;
+  if(a.t==="^")return (time+a.ph)%A.electra.cycle<A.electra.active;
+  if(a.t==="F")return (time+a.ph)%A.fire.cycle<A.fire.burst;
+  return true;
+};
+// a bolt sets an anomaly off: electra and zharka go quiet for a while, a gravity funnel shows itself
 function quietGroup(c,r){
-  let a=c,b=c;while(tile(a-1,r)==="^")a--;while(tile(b+1,r)==="^")b++;
-  for(let k=a;k<=b;k++)quiet[k+","+r]=time+5;
-  burst((a+b+1)/2*T,r*T+T-6,"#9fd8ff",10,.5);
-  texts.push({x:(a+b+1)/2*T,y:r*T,s:"Аномалію знешкоджено",life:1.2});
+  const a=anomAt(c,r);if(!a)return;
+  if(a.t==="V"){a.reveal=time+CFG.anomaly.gravity.reveal;burst(a.cx,r*T+T-8,"#cfe0ff",12,.6);texts.push({x:a.cx,y:r*T-10,s:"Гравітаційна аномалія!",life:1.4});return;}
+  for(let k=a.c0;k<=a.c1;k++)quiet[k+","+r]=time+(a.t==="F"?4:5);
+  burst(a.cx,r*T+T-6,a.t==="F"?"#ffb04a":"#9fd8ff",12,.6);
+  texts.push({x:a.cx,y:r*T,s:"Аномалію знешкоджено",life:1.2});
+}
+// what the anomalies do to the stalker (or the UAZ) this frame; true if he died
+function anomalies(){
+  const A=CFG.anomaly, bd=body(), drv=driving(), cxb=bd.x+bd.w/2, foot=bd.y+bd.h;
+  for(const a of anoms){
+    const gy=(a.r+1)*T;
+    if(a.t==="V"){
+      const R=A.gravity.radius*T, dx=cxb-a.cx, d=Math.abs(dx);
+      if(d>R||foot<gy-90)continue;
+      const k=1-d/R;
+      // the funnel drags you in directly (friction would cancel a force); walking out is still possible
+      const o=drv?car:p, v0=o.vx;o.vx=-Math.sign(dx)*(drv?A.gravity.carPull:A.gravity.pull)*(.25+.75*k);moveX(o);o.vx=v0;
+      if(d<14&&foot>gy-6&&a.cool<time){
+        a.cool=time+1.2;a.reveal=Math.max(a.reveal,time+2);
+        const side=Math.random()<.5?-1:1;burst(a.cx,gy-10,"#cfe0ff",14,.8);shake=.2;
+        if(drv){carDamage(A.gravity.carDmg);car.vy=-380;car.vx=side*200;}
+        else{p.vy=-520;p.vx=side*240;if(hurtP(A.gravity.dmg,{force:true}))return true;}
+      }
+      continue;
+    }
+    if(!anomOn(a)||bd.x+bd.w<=a.x0||bd.x>=a.x1)continue;
+    if(a.t==="^"&&foot>a.r*T+14){
+      if(drv){if(car.zap<=0){car.zap=.6;car.vy=-320;carDamage(A.electra.carDmg);burst(a.cx,gy-6,"#e6f4ff",10,.6);}}
+      else if(hurtP(A.electra.dmg,{from:a.cx}))return true;
+    }
+    if(a.t==="F"&&foot>gy-A.fire.height){
+      if(drv){if(car.zap<=0){car.zap=.6;car.vy=-260;carDamage(A.fire.carDmg);}}
+      else if(hurtP(A.fire.dmg,{from:a.cx}))return true;
+    }
+  }
+  return false;
 }
 function enterSub(){
   saved={L,TH,grid,gems,enemies,pickups,car,terr,ret:L.hatch.ret};
@@ -564,7 +736,6 @@ function burst(x,y,col,n,sp=1){
 
 // ---------- update ----------
 let dt=0;
-const ITEM_NAMES={grenade:"гран.",medkit:"аптечка","9x18":"набоїв 9×18","12x70":"набоїв 12 кал.","5.45x39":"набоїв 5,45"};
 const AMMO_COL={"9x18":"#c9a24a","12x70":"#c94a3a","5.45x39":"#7a9a4a"};
 const DEATH_COL={boar:"#c49390",big:"#c49390",dog:"#5a514a",crow:"#2a2a32",stalker:"#3a332c",rat:"#6a5e55",snork:"#5d5a4e",bloodsucker:"#a88a7a",controller:"#8a7a5e"};
 function damage(e,n,kick=0){
@@ -579,7 +750,7 @@ function damage(e,n,kick=0){
   if(e.hp<=0){e.alive=false;e.state="dead";kills++;hud();burst(e.x+e.w/2,e.y+e.h/2,DEATH_COL[e.type],e.type==="big"?26:12);
     if(e.type!=="stalker")burst(e.x+e.w/2,e.y+e.h/2,"#a8c94a",5);
     else{
-      const r=Math.random(), drop=r<.2?{kind:"medkit",n:1}:r<.4?{kind:"grenade",n:1}:r<.6?{kind:"12x70",n:6}:r<.8?{kind:"9x18",n:16}:{kind:"5.45x39",n:30};
+      const r=Math.random(), drop=r<.15?{kind:"medkit",n:1}:r<.27?{kind:"bandage",n:1}:r<.35?{kind:"antirad",n:1}:r<.47?{kind:"grenade",n:1}:r<.62?{kind:"12x70",n:6}:r<.8?{kind:"9x18",n:16}:{kind:"5.45x39",n:30};
       pickups.push({x:e.x+e.w/2-5,y:e.y+e.h-16,vy:-220,...drop});
     }}
 }
@@ -593,6 +764,24 @@ function explode(n){
     if(d<R)hurtP(CFG.dmg.explosion*(1-d/R),{force:true,from:n.x});}
   SFX.boom();
   burst(n.x,n.y,"#ffb04a",18,1.2);burst(n.x,n.y,"#6b6b62",12,.6);
+}
+function radAt(x){let s=0;for(const [c,w,k] of L.rad||[])if(x>=c*T&&x<(c+w)*T)s=Math.max(s,k);return s;}
+let tickT=0;
+function statusEffects(){
+  const bd=body(), cx=bd.x+bd.w/2, zone=radAt(cx);
+  if(zone)st.rad=Math.min(100,st.rad+zone*dt);
+  else st.rad=Math.max(0,st.rad-CFG.rad.decay*dt);
+  for(const [lvl,dps] of CFG.rad.hurt)if(st.rad>=lvl){if(drain(dps*dt))return true;break;}
+  if(st.bleed){
+    if(drain(st.bleed*CFG.bleed.perLevel*dt))return true;
+    if(Math.random()<st.bleed*2*dt)particles.push({x:p.x+p.w/2+(Math.random()-.5)*8,y:p.y+16,vx:0,vy:20,life:.6,col:"#a8251c",sz:2});
+  }
+  // detector: Geiger clicks in radiation, chirps near anomalies
+  let near=0;for(const a of anoms){const d=Math.abs(a.cx-cx);if(d<3*T)near=Math.max(near,1-d/(3*T));}
+  const rate=zone*1.5+near*9;
+  if(rate&&Math.random()<rate*dt)SFX.tick(near>zone/10);
+  hudT-=dt;if(hudT<=0){hudT=.25;hud();}
+  return false;
 }
 // ---------- monster AI: idle → patrol → detect → chase → attack → recover (→ dead) ----------
 function setState(e,s,t=0){e.state=s;e.st=t;e.didHit=false;e.air=false;}
@@ -841,6 +1030,7 @@ const SFX=(()=>{
     boom(){noise(1.1,.95,"lowpass",900,60,.7);tone(.5,.6,"sine",70,28);},
     throw(){noise(.12,.12,"bandpass",1200,2400,2);},
     pickup(){tone(.08,.15,"triangle",660,990);tone(.1,.12,"triangle",990,1320,.07);},
+    tick(chirp){if(chirp)tone(.03,.07,"sine",2400,2200);else noise(.012,.18,"highpass",4000,4000,1);},
     growl(t){
       if(t==="dog")noise(.25,.25,"bandpass",500,300,3);
       else if(t==="boar"){tone(.5,.3,"sawtooth",90,55);noise(.4,.2,"lowpass",400,150,1);}
@@ -881,6 +1071,7 @@ function toggleCar(){
   if(driving()){
     car.drive=false;p.x=car.x+car.w/2-p.w/2;p.y=car.y+car.h-p.h;p.vx=car.vx*.3;p.vy=0;p.inv=.4;hud();return;
   }
+  if(car&&car.wreck&&overlap(p,car,14)){if(st.items.repair)useItem("repair");else note("Потрібен ремкомплект");return;}
   if(car&&!car.wreck&&overlap(p,car,14)){car.drive=true;car.face=p.face;p.vx=0;p.buf=0;burst(car.x+car.w/2,car.y+car.h,"#6b6b62",6,.4);hud();}
 }
 function carPhysics(G){
@@ -922,8 +1113,8 @@ function update(){
     p.x=car.x+car.w/2-p.w/2;p.y=car.y+car.h-p.h;p.vx=car.vx;p.vy=car.vy;p.face=car.face;p.inv=0;
     if(car.y>VIEW_H+60){car=null;hud();fellOff(CFG.dmg.fall);return;}
   }else{
-  const dir=(keys.right?1:0)-(keys.left?1:0);
-  if(dir){p.vx+=dir*ACC*dt*(p.onGround?1:.75);p.vx=Math.max(-MAX,Math.min(MAX,p.vx));p.face=dir;}
+  const dir=(keys.right?1:0)-(keys.left?1:0), mx=carried()>CFG.weightMax?MAX*CFG.overloadSpeed:MAX;
+  if(dir){p.vx+=dir*ACC*dt*(p.onGround?1:.75);if(Math.abs(p.vx)>mx&&Math.sign(p.vx)===dir)p.vx=dir*Math.max(mx,Math.abs(p.vx)-ACC*dt);p.face=dir;}
   else{const f=FR*dt*(p.onGround?1:.4);p.vx=Math.abs(p.vx)<=f?0:p.vx-Math.sign(p.vx)*f;}
   p.vy=Math.min(p.vy+G*dt,900);
   if(!keys.jump&&p.vy<-260)p.vy=-260;
@@ -988,7 +1179,9 @@ function update(){
     o.x+=o.vx*dt;if(solid(Math.floor(o.x/T),Math.floor(o.y/T))||o.y-6>surf(o.x)){o.x-=o.vx*dt;o.vx*=-.3;}
     const py=o.y;o.y+=o.vy*dt;
     const c=Math.floor(o.x/T), r=Math.floor(o.y/T);
-    if(tile(c,r)==="^"&&!isQuiet(c,r)){quietGroup(c,r);o.rest=true;o.life=Math.min(o.life,1.2);continue;}
+    if(isHazard(tile(c,r))&&!isQuiet(c,r)){const a=anomAt(c,r);
+      if(a&&a.t==="V"){if(a.reveal<time+1){quietGroup(c,r);o.vy=-420;o.vx=(Math.random()-.5)*260;}}
+      else{quietGroup(c,r);o.rest=true;o.life=Math.min(o.life,1.2);continue;}}
     const rb=Math.floor((o.y+2)/T), tb=tile(c,rb);
     const gs=surf(o.x);
     if(o.vy>0&&o.y+2>=gs&&py+2<=gs+12){o.y=gs-2;o.rest=true;o.life=Math.min(o.life,1.2);}
@@ -1009,7 +1202,7 @@ function update(){
     const bd=body();
     if(Math.abs(bd.x+bd.w/2-(k.x+5))<bd.w/2+7&&Math.abs(bd.y+bd.h/2-(k.y+6))<22){k.taken=true;
       st.items[k.kind]=(st.items[k.kind]||0)+k.n;if(k.map)pickedMap.push(k.map);hud();SFX.pickup();
-      texts.push({x:k.x+5,y:k.y-6,s:`+${k.n} ${ITEM_NAMES[k.kind]}`,life:1});burst(k.x+5,k.y+6,"#c3d08a",8,.5);}
+      texts.push({x:k.x+5,y:k.y-6,s:`+${k.n} ${ITEMS[k.kind].short}`,life:1});burst(k.x+5,k.y+6,"#c3d08a",8,.5);}
   }
   pickups=pickups.filter(k=>!k.taken&&k.y<VIEW_H+40);
   for(const s of texts){s.y-=28*dt;s.life-=dt;}
@@ -1023,17 +1216,17 @@ function update(){
   ebullets=ebullets.filter(b=>b.life>0);
 
   // anomalies, falling
-  const bd=body(), l=Math.floor(bd.x/T), rr=Math.floor((bd.x+bd.w-.01)/T), t=Math.floor(bd.y/T), bo=Math.floor((bd.y+bd.h-.01)/T);
-  for(let r=t;r<=bo;r++)for(let c=l;c<=rr;c++) if(tile(c,r)==="^"&&!isQuiet(c,r)&&bd.y+bd.h>r*T+14){
-    if(driving()){if(car.zap<=0){car.zap=.6;car.vy=-320;carDamage(15);burst(c*T+16,r*T+T-6,"#e6f4ff",10,.6);}}
-    else if(hurtP(CFG.dmg.electra,{from:c*T+16}))return;}
+  const bd=body();
+  if(anomalies())return;
+  if(statusEffects())return;
   if(L.hatch&&!driving()&&tile(Math.floor((p.x+p.w/2)/T),10)==="H"&&p.y>10*T+6){enterSub();return;}
   if(L.sub&&p.y+p.h>10*T+6){burst(p.x+p.w/2,10*T,"#8fd14a",12);fellOff(CFG.dmg.acid);return;}
   if(p.y>VIEW_H+60){fellOff(CFG.dmg.fall);return;}
 
   for(const g of gems){
     if(g.taken)continue;
-    if(Math.abs(bd.x+bd.w/2-g.x)<bd.w/2+9&&Math.abs(bd.y+bd.h/2-g.y)<bd.h/2+8){g.taken=true;gemTotal++;hud();burst(g.x,g.y,g.col,10);SFX.pickup();}
+    if(Math.abs(bd.x+bd.w/2-g.x)<bd.w/2+9&&Math.abs(bd.y+bd.h/2-g.y)<bd.h/2+8){g.taken=true;gemTotal++;const a="art"+g.k;st.items[a]=(st.items[a]||0)+1;hud();burst(g.x,g.y,g.col,10);SFX.pickup();
+      texts.push({x:g.x,y:g.y-10,s:ITEMS[a].name,life:1,col:g.col});}
   }
 
   // enemies
@@ -1523,6 +1716,31 @@ function draw(){
       ctx.fillStyle="#9a5a30";ctx.fillRect(x,y,T,3);
       ctx.fillStyle="#4a2a17";ctx.fillRect(x,y+8,T,2);
       ctx.fillStyle="#c27a44";ctx.fillRect(x+5,y+5,2,2);ctx.fillRect(x+T-7,y+5,2,2);
+    }else if(ch==="F"){
+      const a=anomAt(c,r), on=a&&anomOn(a), q=isQuiet(c,r);
+      ctx.fillStyle="rgba(30,20,12,.55)";ctx.beginPath();ctx.ellipse(x+16,y+T-2,17,4,0,0,7);ctx.fill();
+      const gl=ctx.createRadialGradient(x+16,y+T-3,1,x+16,y+T-3,16);gl.addColorStop(0,q?"rgba(120,80,60,.4)":"rgba(255,140,50,.75)");gl.addColorStop(1,"rgba(255,90,20,0)");
+      ctx.fillStyle=gl;ctx.fillRect(x-2,y+T-20,T+4,20);
+      if(on){const H=CFG.anomaly.fire.height, fl=Math.sin(time*30+c)*4;
+        for(const [w,h,col] of [[16,H,"rgba(255,90,20,.75)"],[11,H*.8,"rgba(255,170,40,.85)"],[6,H*.55,"rgba(255,240,170,.9)"]]){
+          ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x+16-w,y+T-2);ctx.quadraticCurveTo(x+16-w*.6+fl,y+T-h*.6,x+16+fl*.5,y+T-h);ctx.quadraticCurveTo(x+16+w*.6-fl,y+T-h*.6,x+16+w,y+T-2);ctx.fill();}
+        if(Math.random()<.4)particles.push({x:x+16+(Math.random()-.5)*14,y:y+T-H*.6,vx:(Math.random()-.5)*30,vy:-120,life:.4,col:"#ffcf7a",sz:2});
+      }else if(!q){ctx.fillStyle="rgba(255,200,120,.25)";for(let i=0;i<3;i++){const hx=x+8+i*8+Math.sin(time*3+i)*2;ctx.fillRect(hx,y+T-10-((time*30+i*9)%22),1.5,5);}}
+      if(q&&tile(c-1,r)!=="F"){ctx.fillStyle="rgba(255,220,180,.85)";ctx.font="bold 12px system-ui, sans-serif";ctx.textAlign="center";ctx.fillText(Math.ceil(quiet[c+","+r]-time),x+16,y+T-12);}
+    }else if(ch==="V"){
+      const a=anomAt(c,r), shown=a&&a.reveal>time, cx=x+16, cy=y+T-14;
+      // nearly invisible until a bolt (or a victim) shows it: dust circling over a darker patch
+      ctx.fillStyle="rgba(0,0,0,.12)";ctx.beginPath();ctx.ellipse(cx,y+T-2,22,4,0,0,7);ctx.fill();
+      for(let i=0;i<6;i++){const ang=time*(2+i*.3)+i*1.7, rad=10+i*5;
+        ctx.fillStyle=shown?"rgba(210,225,255,.8)":"rgba(170,165,140,.22)";ctx.fillRect(cx+Math.cos(ang)*rad,cy+Math.sin(ang)*rad*.35-i*2,2,2);}
+      if(shown){ctx.strokeStyle="rgba(190,210,255,.55)";ctx.lineWidth=1.5;
+        for(let i=0;i<3;i++){const k=((time*.8+i/3)%1);ctx.globalAlpha=1-k;ctx.beginPath();ctx.ellipse(cx,cy,8+k*CFG.anomaly.gravity.radius*T*.8,(8+k*40)*.35,0,0,7);ctx.stroke();}
+        ctx.globalAlpha=1;}
+    }else if(ch==="^"&&!isQuiet(c,r)&&!anomOn(anomAt(c,r)||{t:"^",c0:c,r,ph:0})){
+      const gl=ctx.createRadialGradient(x+16,y+T-4,2,x+16,y+T-4,16);
+      gl.addColorStop(0,"rgba(170,220,255,.35)");gl.addColorStop(1,"rgba(120,180,255,0)");
+      ctx.fillStyle=gl;ctx.fillRect(x-4,y+12,T+8,T-12);
+      if(rnd(Math.floor(time*10)+c)>.8){ctx.strokeStyle="rgba(230,244,255,.5)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x+10,y+T);ctx.lineTo(x+14,y+T-6);ctx.lineTo(x+12,y+T-10);ctx.stroke();}
     }else if(ch==="^"&&isQuiet(c,r)){
       ctx.fillStyle="rgba(150,170,190,.18)";ctx.beginPath();ctx.ellipse(x+16,y+T-3,15,4,0,0,7);ctx.fill();
       if(tile(c-1,r)!=="^"){const left=Math.ceil(quiet[c+","+r]-time);
@@ -1541,6 +1759,17 @@ function draw(){
         ctx.stroke();
       }
     }
+  }
+  // radiation zones: sign post + a sickly haze
+  for(const [c,w,k] of L.rad||[]){
+    const x0=c*T, x1=(c+w)*T;if(x1<camX-40||x0>camX+viewW+40)continue;
+    const g=ctx.createLinearGradient(0,BASE-150,0,BASE);g.addColorStop(0,"rgba(170,200,60,0)");g.addColorStop(1,`rgba(170,200,60,${.08+k*.008+.04*Math.sin(time*2+c)})`);
+    ctx.fillStyle=g;ctx.fillRect(x0,BASE-150,x1-x0,150);
+    for(let i=0;i<w*2;i++){const px=x0+((i*37+time*14)%(x1-x0)), py=BASE-10-((time*18+i*23)%120);ctx.fillStyle="rgba(200,230,90,.35)";ctx.fillRect(px,py,1.5,1.5);}
+    const sx=x0-8, sy=topAt(sx,2);
+    ctx.fillStyle="#3a3c34";ctx.fillRect(sx-1.5,sy-44,3,44);
+    ctx.fillStyle="#e5c33a";ctx.beginPath();ctx.moveTo(sx,sy-62);ctx.lineTo(sx+13,sy-40);ctx.lineTo(sx-13,sy-40);ctx.closePath();ctx.fill();
+    trefoil(sx,sy-47,6,"#1d1a08","#e5c33a");
   }
   // checkpoint lanterns
   for(const c of L.cps){
@@ -1584,6 +1813,9 @@ function draw(){
     ctx.shadowColor="#e5c33a";ctx.shadowBlur=8;
     if(k.kind==="medkit")medkitSprite(k.x+5,k.y+6+bob);
     else if(AMMO_COL[k.kind])ammoSprite(k.x+5,k.y+7+bob,k.kind);
+    else if(k.kind==="bandage"){ctx.fillStyle="#e9e6da";rr(k.x-2,k.y+2+bob,14,9,4);ctx.fill();ctx.fillStyle="#c9c4b4";ctx.fillRect(k.x+3,k.y+2+bob,4,9);}
+    else if(k.kind==="antirad"){ctx.fillStyle="#d8d4c6";rr(k.x-1,k.y-2+bob,12,14,2);ctx.fill();trefoil(k.x+5,k.y+5+bob,4.5,"#1d1a08","#e5c33a");}
+    else if(k.kind==="repair"){ctx.fillStyle="#b3342b";rr(k.x-3,k.y+1+bob,16,11,2);ctx.fill();ctx.fillStyle="#3a3c34";ctx.fillRect(k.x+1,k.y-2+bob,8,3);ctx.fillStyle="#e5c33a";ctx.fillRect(k.x+3,k.y+5+bob,4,2);}
     else{nadeSprite(k.x+5,k.y+5+bob,0);if(k.n>1)nadeSprite(k.x+12,k.y+7+bob,.4);}
     ctx.shadowBlur=0;}
   for(const e of enemies){if(e.alive||e.dead<.5)drawEnemy(e);}
