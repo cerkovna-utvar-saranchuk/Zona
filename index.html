@@ -27,7 +27,8 @@ body{background:var(--ground);color:var(--text);font-family:var(--body);overflow
 .hud{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .lvl{font-family:var(--display);font-size:15px;letter-spacing:.04em;min-width:0}
 .lvl small{display:block;font-family:var(--body);font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}
-.stats{display:flex;gap:14px;align-items:center;font-weight:800;font-variant-numeric:tabular-nums}
+.stats{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;justify-content:flex-end;font-weight:800;font-variant-numeric:tabular-nums;min-width:0}
+@media (max-width:520px){.hud{gap:6px 12px}.stats{gap:6px 11px;justify-content:flex-start}.hpbar{width:70px}}
 .stat{display:flex;align-items:center;gap:6px}
 .art-ico{width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 40% 40%,#fff 0 20%,var(--glow) 45%,#3d8f80 100%);box-shadow:0 0 9px var(--glow)}
 .pig-ico{font-size:13px;color:var(--muted)}
@@ -52,7 +53,6 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .pad{display:none;justify-content:space-between;align-items:center;gap:10px;padding-bottom:4px}
 .pad .grp{display:flex;gap:8px}
 .pad .acts{display:grid;grid-template-columns:repeat(3,60px);grid-template-rows:40px 58px;gap:8px}
-.pad .acts .jump{grid-column:span 2}
 .pad .acts button{width:auto;height:auto}
 .pad .dirs button{height:106px;width:58px}
 .pad .bolt{background:#2a2a30;border-color:#8a8fa8;color:#c9cde0}
@@ -70,6 +70,20 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .pad .jump{background:#38310f;border-color:var(--rad);color:var(--rad)}
 .pad .jump.on{background:#574a14}
 .pad .car{background:#262b22;border-color:#8a9466;color:#cfd6a8}
+.pad .wpn{background:#24282c;border-color:#7d8794;color:#cdd6e0}
+.pad .wpn.on{background:#353b42}
+.pad .rel{background:#24282c;border-color:#7d8794;color:#cdd6e0;font-size:18px}
+.wstat{font-family:var(--display);font-weight:400;font-size:12px;color:#cdd6e0;letter-spacing:.02em}
+.wstat b{font-family:var(--body);font-weight:800;font-size:14px;color:var(--text)}
+.wstat b.low{color:#ff8a7a}
+.wpanel{position:absolute;right:10px;bottom:10px;display:grid;grid-template-columns:repeat(2,minmax(0,120px));gap:8px;
+  padding:10px;background:rgba(27,30,24,.94);border:1px solid var(--line);border-radius:12px;z-index:3}
+.wpanel button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:9px 11px;border-radius:10px;
+  border:1px solid var(--line);background:var(--panel);color:var(--text);font:400 13px var(--display);text-align:left;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:pointer}
+.wpanel button small{font:800 12px var(--body);color:var(--muted);font-variant-numeric:tabular-nums}
+.wpanel button.cur{border-color:var(--rad);box-shadow:inset 0 0 0 1px var(--rad)}
+.mute{background:var(--panel);border-color:var(--line);color:var(--text)}
 .pad .car.on{background:#3a4230}
 .carbar{width:46px;height:7px;border-radius:4px;background:var(--line);overflow:hidden}
 .carbar i{display:block;height:100%;width:100%;background:#7fd36a}
@@ -86,12 +100,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <button class="hudbtn" id="bMed" title="Аптечка (H)" aria-label="Використати аптечку">✚ <span id="medN">2</span></button>
       <div class="stat" title="Артефакти"><span class="art-ico" aria-hidden="true"></span><span id="gems">0</span></div>
       <div class="stat" title="Знищено ворогів"><span class="pig-ico" aria-hidden="true">✕</span><span id="kills">0</span></div>
+      <div class="stat wstat" title="Зброя і патрони"><span id="wName">АК-74</span><b id="wAmmo">30/60</b></div>
       <div class="stat" title="Гранати"><span class="nade-ico" aria-hidden="true"></span><span id="nades">1</span></div>
+      <button class="hudbtn mute" id="bMute" title="Звук (M)" aria-label="Увімкнути або вимкнути звук">🔊</button>
       <div class="stat" id="carStat" title="Стан УАЗа" hidden><span class="car-ico">УАЗ</span><span class="carbar"><i id="carBar"></i></span></div>
     </div>
   </div>
   <div class="stage">
     <canvas id="c" aria-label="Ігрове поле"></canvas>
+    <div class="wpanel" id="wpanel" hidden aria-label="Вибір зброї"></div>
     <div class="overlay" id="ov">
       <div class="card">
         <h1 id="ovTitle">Зона відчуження</h1>
@@ -107,14 +124,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <button id="bR" aria-label="Праворуч">▶</button>
     </div>
     <div class="acts">
+      <button class="act wpn" id="bW" aria-label="Вибрати зброю">ЗБРОЯ</button>
+      <button class="act rel" id="bRl" aria-label="Перезарядити">⟳</button>
       <button class="act bolt" id="bB" aria-label="Болт">БОЛТ</button>
-      <button class="act gren" id="bG" aria-label="Граната">ГРАНАТА</button>
-      <button class="act car" id="bC" aria-label="Сісти в УАЗ або вийти">АВТО</button>
+      <button class="act car" id="bC" aria-label="Дія: сісти в УАЗ або вийти">ДІЯ</button>
       <button class="act fire" id="bF" aria-label="Вогонь">ВОГОНЬ</button>
       <button class="act jump" id="bJ" aria-label="Стрибок">СТРИБОК</button>
     </div>
   </div>
-  <div class="hint">Стрілки або A / D — рух, пробіл або W — стрибок, J або F — вогонь, G — граната, B — болт, E — сісти в УАЗ / вийти</div>
+  <div class="hint">Стрілки або A / D — рух, пробіл або W — стрибок, J або F — вогонь, 1–4 — зброя, R — перезарядити, G — граната, B — болт, H — аптечка, E — дія / УАЗ, M — звук</div>
 </div>
 
 <script>
@@ -127,19 +145,29 @@ const CFG={
   dmg:{dog:12, boar:25, big:35, snork:20, bloodsucker:30, controller:15, stalker:10, bandit:15, rat:6, crow:8,
        electra:30, explosion:40, fall:35, acid:35},
   heal:{medkit:40},
+  // falloff:[full-damage distance, zero-point distance, minimum share]
+  weapons:{
+    pm:{name:"ПМ", ammo:"9x18", mag:8, dmg:18, pellets:1, rate:.22, auto:false, reload:.9, spread:.015, speed:760, range:420, recoil:1.2, kick:50},
+    sg:{name:"Обріз", ammo:"12x70", mag:2, dmg:16, pellets:7, rate:.35, auto:false, reload:1.6, spread:.15, speed:640, range:230, recoil:4, kick:140, falloff:[50,220,.15]},
+    ak:{name:"АК-74", ammo:"5.45x39", mag:30, dmg:25, pellets:1, rate:.1, auto:true, reload:1.8, spread:.045, speed:840, range:560, recoil:2.2, kick:45},
+    nade:{name:"Граната", radius:95, dmgEnemy:130, fuse:1.3}
+  },
+  stomp:30,
   autosave:15,
   difficulty:{easy:{name:"Новачок",dmg:.6}, normal:{name:"Сталкер",dmg:1}, hard:{name:"Ветеран",dmg:1.4}}
 };
-const freshSt=()=>({hp:CFG.player.maxHp, items:{medkit:2, grenade:1}});
+const WEAPON_ORDER=["pm","sg","ak","nade"];
+const freshSt=()=>({hp:CFG.player.maxHp, cur:"ak", wpn:{pm:{mag:8},sg:{mag:2},ak:{mag:30}},
+  items:{medkit:2, grenade:2, "9x18":32, "12x70":10, "5.45x39":60}});
 const clone=o=>JSON.parse(JSON.stringify(o));
 const ART_COLORS=["#8fe0d0","#f2a640","#c78bff","#7fd36a","#ff6f61"];
 const ETYPES={
-  boar:{w:30,h:22,hp:2,speed:55},
-  big:{w:46,h:34,hp:6,speed:40},
-  dog:{w:28,h:18,hp:1,speed:115},
-  crow:{w:22,h:14,hp:1,speed:0},
-  stalker:{w:20,h:28,hp:3,speed:40},
-  rat:{w:20,h:12,hp:1,speed:95}
+  boar:{w:30,h:22,hp:100,speed:55},
+  big:{w:46,h:34,hp:300,speed:40},
+  dog:{w:28,h:18,hp:35,speed:115},
+  crow:{w:22,h:14,hp:20,speed:0},
+  stalker:{w:20,h:28,hp:80,speed:40},
+  rat:{w:20,h:12,hp:15,speed:95}
 };
 const THEMES={
   village:{sky:["#2b3127","#5b6249","#7a7d5a"],far:"#46503f",mid:"#262b20",grass:["#5e5a32","#8a8650"]},
@@ -186,7 +214,7 @@ const LEVELS=[
   gems:[[11,7],[15,6],[21,7],[24,6],[25,6],[31,7],[32,7],[35,7],[41,7],[44,7],[48,7],[52,6],[59,7],[60,7],[64,6],[70,7],[72,7],[77,7],[80,6],[87,7],[96,7],[101,7],[105,6]],
   enemies:[[6,9,"dog"],[17,9,"stalker"],[27,9,"boar"],[36,9,"stalker"],[41,9,"stalker"],[50,9,"dog"],[56,9,"stalker"],[66,9,"boar"],[71,9,"stalker"],
            [80,9,"stalker"],[84,9,"dog"],[91,9,"stalker"],[109,9,"big"],[25,3,"crow"],[45,3,"crow"],[62,3,"crow"],[90,3,"crow"]],
-  start:2, cps:[37,66], flag:112, bossHp:8, car:2}
+  start:2, cps:[37,66], flag:112, bossHp:400, car:2}
 ];
 const SUB={name:"Підземні комунікації", theme:"sewer", sub:true, w:72, spawnRow:7,
   pipes:[[0,8,8],[10,8,5],[12,5,3],[17,7,4],[23,8,6],[26,5,3],[31,6,3],[36,8,6],[44,7,3],[46,4,3],[49,8,7],[58,7,3],[63,8,9]],
@@ -208,7 +236,7 @@ window.addEventListener("resize",resize);
 const rnd=n=>{const s=Math.sin(n*12.9898+78.233)*43758.5453;return s-Math.floor(s);};
 
 // ---------- state ----------
-let L, TH, grid, gems, enemies, bullets, ebullets, particles, p, camX=0, lvlIdx=0, st=freshSt(), levelStart=null, fx={hit:0}, saveT=0, settings={diff:"normal"}, gemTotal=0, kills=0, running=false, time=0, cpCol=2, grenades=[], pickups=[], booms=[], texts=[], shake=0, gReq=false, banner="", bannerT=0, saved=null, bolts=[], bReq=false, boltCd=0, quiet={}, car=null, cReq=false;
+let L, TH, grid, gems, enemies, bullets, ebullets, particles, p, camX=0, lvlIdx=0, st=freshSt(), levelStart=null, fx={hit:0}, saveT=0, settings={diff:"normal"}, gemTotal=0, kills=0, running=false, time=0, cpCol=2, grenades=[], pickups=[], booms=[], texts=[], shake=0, gReq=false, banner="", bannerT=0, saved=null, bolts=[], bReq=false, boltCd=0, quiet={}, car=null, cReq=false, fireReq=false, rReq=false;
 const CAR_MAX=100;
 // how hard a ram hurts the UAZ, by enemy type
 const RAM_COST={boar:10,big:22,dog:6,crow:2,stalker:8,rat:3};
@@ -261,6 +289,8 @@ function hud(){
   $("gems").textContent=gemTotal;
   $("kills").textContent=kills;
   $("nades").textContent=st.items.grenade;
+  const cw=CFG.weapons[st.cur];$("wName").textContent=cw.name;$("wAmmo").textContent=ammoText(st.cur);
+  $("wAmmo").classList.toggle("low",st.cur==="nade"?!st.items.grenade:st.wpn[st.cur].mag===0);
   const hp=Math.max(0,Math.ceil(st.hp)), hf=st.hp/CFG.player.maxHp;
   $("hpNum").textContent=hp;
   $("hpBar").style.cssText=`width:${hf*100}%;background-color:${hf>.6?"#7fd36a":hf>.25?"#e5c33a":"#d9493f"}`;
@@ -333,24 +363,46 @@ function moveY(o){
 
 // ---------- input ----------
 const keys={left:false,right:false,jump:false,fire:false,gren:false,bolt:false,car:false};
-const KMAP={ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",Space:"jump",ArrowUp:"jump",KeyW:"jump",KeyJ:"fire",KeyF:"fire",KeyX:"fire",KeyK:"fire",KeyG:"gren",KeyL:"gren",KeyB:"bolt",KeyQ:"bolt",KeyE:"car",KeyC:"car",KeyH:"med"};
+const KMAP={ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",Space:"jump",ArrowUp:"jump",KeyW:"jump",KeyJ:"fire",KeyF:"fire",KeyX:"fire",KeyK:"fire",KeyG:"gren",KeyL:"gren",KeyB:"bolt",KeyQ:"bolt",KeyE:"car",KeyC:"car",KeyH:"med",KeyR:"reload",Digit1:"w1",Digit2:"w2",Digit3:"w3",Digit4:"w4",KeyM:"mute"};
 addEventListener("keydown",e=>{const k=KMAP[e.code];if(!k)return;e.preventDefault();
   if(k==="gren"&&!e.repeat)gReq=true;
   if(k==="bolt"&&!e.repeat)bReq=true;
   if(k==="car"&&!e.repeat)cReq=true;
   if(k==="med"&&!e.repeat&&running)useItem("medkit");
+  if(k==="fire"&&!e.repeat)fireReq=true;
+  if(k==="reload"&&!e.repeat)rReq=true;
+  if(k==="mute"&&!e.repeat)toggleMute();
+  if(k[0]==="w"&&k.length===2&&!e.repeat)selectWeapon(WEAPON_ORDER[+k[1]-1]);
   if(k==="jump"&&!keys.jump&&p)p.buf=.12; keys[k]=true;
   if(k==="jump"&&!running&&!$("ov").hidden&&!e.repeat)$("ovBtn").click();});
 addEventListener("keyup",e=>{const k=KMAP[e.code];if(k)keys[k]=false;});
 function bindBtn(id,k){
   const b=$(id);
-  const on=e=>{e.preventDefault();if(k==="gren")gReq=true;if(k==="bolt")bReq=true;if(k==="car")cReq=true;if(k==="jump"&&!keys.jump&&p)p.buf=.12;keys[k]=true;b.classList.add("on");try{b.setPointerCapture(e.pointerId)}catch(_){}};
+  const on=e=>{e.preventDefault();if(k==="gren")gReq=true;if(k==="bolt")bReq=true;if(k==="car")cReq=true;if(k==="fire")fireReq=true;if(k==="jump"&&!keys.jump&&p)p.buf=.12;keys[k]=true;b.classList.add("on");try{b.setPointerCapture(e.pointerId)}catch(_){}};
   const off=()=>{keys[k]=false;b.classList.remove("on");};
   b.addEventListener("pointerdown",on);
   ["pointerup","pointercancel","lostpointercapture"].forEach(ev=>b.addEventListener(ev,off));
   b.addEventListener("contextmenu",e=>e.preventDefault());
 }
-bindBtn("bL","left");bindBtn("bR","right");bindBtn("bJ","jump");bindBtn("bF","fire");bindBtn("bG","gren");bindBtn("bB","bolt");bindBtn("bC","car");
+bindBtn("bL","left");bindBtn("bR","right");bindBtn("bJ","jump");bindBtn("bF","fire");bindBtn("bB","bolt");bindBtn("bC","car");
+const tapBtn=(id,fn)=>{const b=$(id);b.addEventListener("pointerdown",e=>{e.preventDefault();fn();});b.addEventListener("contextmenu",e=>e.preventDefault());};
+tapBtn("bRl",()=>{rReq=true;});
+tapBtn("bW",()=>{const w=$("wpanel");if(w.hidden)openWeapons();else w.hidden=true;});
+$("bMute").addEventListener("click",toggleMute);
+function openWeapons(){
+  const w=$("wpanel");
+  w.innerHTML=WEAPON_ORDER.map(id=>{const c=CFG.weapons[id];
+    return `<button data-w="${id}" class="${st.cur===id?"cur":""}">${c.name}<small>${ammoText(id)}</small></button>`;}).join("");
+  w.hidden=false;$("bW").classList.add("on");
+}
+$("wpanel").addEventListener("click",e=>{const b=e.target.closest("button");if(b)selectWeapon(b.dataset.w);});
+function selectWeapon(id){
+  if(!CFG.weapons[id])return;
+  $("wpanel").hidden=true;$("bW").classList.remove("on");
+  if(st.cur===id)return;
+  st.cur=id;if(p){p.reload=0;p.cd=Math.max(p.cd,.15);}SFX.click();hud();
+}
+const ammoText=id=>id==="nade"?`${st.items.grenade} шт.`:`${st.wpn[id].mag}/${st.items[CFG.weapons[id].ammo]}`;
 $("bMed").addEventListener("click",()=>{if(running)useItem("medkit");});
 
 // ---------- flow ----------
@@ -394,7 +446,9 @@ function loadGame(){
   if(!d||!(d.lvl>=0&&d.lvl<LEVELS.length)){newGame();return;}
   try{
     lvlIdx=d.lvl;saved=null;bannerT=0;
-    st=Object.assign(freshSt(),d.st);st.items=Object.assign(freshSt().items,d.st.items);
+    const fs=freshSt();
+    st=Object.assign(fs,d.st);st.items=Object.assign(freshSt().items,d.st.items);
+    st.wpn=Object.assign(freshSt().wpn,d.st.wpn);if(!CFG.weapons[st.cur])st.cur="ak";
     st.hp=Math.max(1,Math.min(CFG.player.maxHp,+st.hp||CFG.player.maxHp));
     gemTotal=d.gemTotal|0;kills=d.kills|0;levelStart=d.ls||{st:clone(st),gemTotal,kills};
     build(lvlIdx);
@@ -439,7 +493,7 @@ function hurtP(n,o={}){
   if(!o.force&&p.inv>0)return false;
   n=Math.max(1,Math.round(n*CFG.difficulty[settings.diff].dmg));
   st.hp=Math.max(0,st.hp-n);
-  p.inv=CFG.player.invuln;fx.hit=.35;shake=Math.max(shake,.12);
+  p.inv=CFG.player.invuln;fx.hit=.35;shake=Math.max(shake,.12);SFX.hurt();
   burst(p.x+p.w/2,Math.min(p.y+p.h/2,VIEW_H-20),"#d9493f",8,.7);
   texts.push({x:p.x+p.w/2,y:p.y-6,s:`-${n}`,life:.8,col:"#ff8a7a"});
   if(o.from!=null){const d=Math.sign(p.x+p.w/2-o.from)||-p.face;p.vx=d*CFG.player.knockX;p.vy=Math.min(p.vy,-CFG.player.knockY);}
@@ -491,19 +545,28 @@ function burst(x,y,col,n,sp=1){
 
 // ---------- update ----------
 let dt=0;
-const ITEM_NAMES={grenade:"гран.",medkit:"аптечка"};
+const ITEM_NAMES={grenade:"гран.",medkit:"аптечка","9x18":"набоїв 9×18","12x70":"набоїв 12 кал.","5.45x39":"набоїв 5,45"};
+const AMMO_COL={"9x18":"#c9a24a","12x70":"#c94a3a","5.45x39":"#7a9a4a"};
 const DEATH_COL={boar:"#c49390",big:"#c49390",dog:"#5a514a",crow:"#2a2a32",stalker:"#3a332c",rat:"#6a5e55"};
-function damage(e,n){
+function damage(e,n,kick=0){
   e.hp-=n;e.hit=.12;
+  if(kick&&e.type!=="crow"){e.x+=kick*.06;e.stun=Math.max(e.stun||0,Math.min(.25,Math.abs(kick)/600));}
   if(e.hp<=0){e.alive=false;kills++;hud();burst(e.x+e.w/2,e.y+e.h/2,DEATH_COL[e.type],e.type==="big"?26:12);
     if(e.type!=="stalker")burst(e.x+e.w/2,e.y+e.h/2,"#a8c94a",5);
-    else pickups.push({x:e.x+e.w/2-5,y:e.y+e.h-16,vy:-220,...(Math.random()<.3?{kind:"medkit",n:1}:{kind:"grenade",n:Math.random()<.35?2:1})});}
+    else{
+      const r=Math.random(), drop=r<.2?{kind:"medkit",n:1}:r<.4?{kind:"grenade",n:1}:r<.6?{kind:"12x70",n:6}:r<.8?{kind:"9x18",n:16}:{kind:"5.45x39",n:30};
+      pickups.push({x:e.x+e.w/2-5,y:e.y+e.h-16,vy:-220,...drop});
+    }}
 }
 function explode(n){
   n.fuse=0;booms.push({x:n.x,y:n.y,t:0});shake=.3;
   for(const e of enemies){if(!e.alive)continue;
     const dx=e.x+e.w/2-n.x, dy=e.y+e.h/2-n.y;
-    if(dx*dx+dy*dy<78*78)damage(e,4);}
+    const d=Math.hypot(dx,dy), R=CFG.weapons.nade.radius;
+    if(d<R)damage(e,Math.round(CFG.weapons.nade.dmgEnemy*(1-d/R*.7)),Math.sign(dx)*120);}
+  if(!driving()&&st.hp>0){const d=Math.hypot(p.x+p.w/2-n.x,p.y+p.h/2-n.y), R=CFG.weapons.nade.radius;
+    if(d<R)hurtP(CFG.dmg.explosion*(1-d/R),{force:true,from:n.x});}
+  SFX.boom();
   burst(n.x,n.y,"#ffb04a",18,1.2);burst(n.x,n.y,"#6b6b62",12,.6);
 }
 function lineOfSight(e){
@@ -513,6 +576,99 @@ function lineOfSight(e){
   for(let x=Math.min(x0,x1);x<Math.max(x0,x1);x+=12) if(surf(x)<ey) return false;
   return true;
 }
+// ---------- weapons ----------
+function throwGrenade(){
+  if(st.items.grenade<=0){note("Немає гранат");SFX.empty();return;}
+  st.items.grenade--;hud();SFX.throw();
+  grenades.push({x:p.x+p.w/2+p.face*8,y:p.y+8,vx:p.face*270+p.vx*.5,vy:-390,fuse:CFG.weapons.nade.fuse,rot:0});
+}
+function startReload(){
+  const id=st.cur;if(id==="nade"||p.reload>0)return;
+  const w=CFG.weapons[id], s=st.wpn[id];
+  if(s.mag>=w.mag)return;
+  if(!st.items[w.ammo]){note("Немає патронів");SFX.empty();return;}
+  p.reload=w.reload;p.reloadOf=id;SFX.reload();
+}
+function weaponUpdate(){
+  const id=st.cur, w=CFG.weapons[id], rq=rReq;
+  // a tap is remembered briefly, so presses during the switch delay or the last shot are not lost
+  p.fireBuf=fireReq?.25:(p.fireBuf||0)-dt;fireReq=rReq=false;
+  const req=p.fireBuf>0&&p.cd<=0;
+  if(driving())return;
+  if(id==="nade"){if(req){p.fireBuf=0;p.cd=.5;throwGrenade();}return;}
+  const s=st.wpn[id];
+  if(p.reload>0){
+    p.reload-=dt;
+    if(p.reload<=0){const take=Math.min(w.mag-s.mag,st.items[w.ammo]);s.mag+=take;st.items[w.ammo]-=take;SFX.click();hud();}
+    return;
+  }
+  if(rq){startReload();return;}
+  if(!(w.auto?keys.fire||req:req)||p.cd>0)return;
+  p.fireBuf=0;
+  if(s.mag<=0){if(st.items[w.ammo])startReload();else{p.cd=.3;note("Немає патронів");SFX.empty();}return;}
+  s.mag--;p.cd=w.rate;p.flash=.06;p.recoil=w.recoil;hud();
+  const mx=p.face>0?p.x+p.w+12:p.x-12, my=p.y+16.5;
+  for(let i=0;i<w.pellets;i++){
+    const a=(Math.random()-.5)*2*w.spread, sp=w.speed*(w.pellets>1?.85+Math.random()*.3:1);
+    bullets.push({x:mx,y:my,vx:p.face*Math.cos(a)*sp,vy:Math.sin(a)*sp,life:2,dist:0,range:w.range,dmg:w.dmg,kick:w.kick,falloff:w.falloff,pellet:w.pellets>1});
+  }
+  p.vx-=p.face*w.recoil*(p.onGround?8:14);
+  particles.push({x:p.x+p.w/2,y:p.y+16,vx:-p.face*(40+Math.random()*40),vy:-160-Math.random()*60,life:.5,col:id==="sg"?"#b8332a":"#d4a43a",sz:2});
+  SFX.shot(id);
+  if(s.mag===0&&st.items[w.ammo])p.autoReload=.25;
+}
+
+// ---------- sound (WebAudio, synthesized: no files to load) ----------
+const SFX=(()=>{
+  let ac=null, master=null, noiseBuf=null;
+  const on=()=>!settings.mute;
+  function init(){
+    if(ac)return;
+    try{ac=new (window.AudioContext||window.webkitAudioContext)();}catch(_){return;}
+    master=ac.createGain();master.gain.value=settings.mute?0:.6;master.connect(ac.destination);
+    noiseBuf=ac.createBuffer(1,ac.sampleRate,ac.sampleRate);
+    const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+  }
+  function env(g,vol,t0,dur,att=.004){g.gain.setValueAtTime(0,t0);g.gain.linearRampToValueAtTime(vol,t0+att);g.gain.exponentialRampToValueAtTime(.0008,t0+dur);}
+  function noise(dur,vol,type,f1,f2,q=1,delay=0,out=master){
+    if(!ac||!on())return;const t=ac.currentTime+delay;
+    const s=ac.createBufferSource();s.buffer=noiseBuf;s.loop=true;
+    const f=ac.createBiquadFilter();f.type=type;f.Q.value=q;f.frequency.setValueAtTime(f1,t);f.frequency.exponentialRampToValueAtTime(f2,t+dur);
+    const g=ac.createGain();env(g,vol,t,dur);s.connect(f);f.connect(g);g.connect(out);s.start(t,Math.random()*.5);s.stop(t+dur+.05);
+  }
+  function tone(dur,vol,type,f1,f2,delay=0,out=master){
+    if(!ac||!on())return;const t=ac.currentTime+delay;
+    const o=ac.createOscillator();o.type=type;o.frequency.setValueAtTime(f1,t);o.frequency.exponentialRampToValueAtTime(f2,t+dur);
+    const g=ac.createGain();env(g,vol,t,dur);o.connect(g);g.connect(out);o.start(t);o.stop(t+dur+.05);
+  }
+  const api={init,noise,tone,get ctx(){return ac;},get out(){return master;},
+    setMute(m){if(master)master.gain.setTargetAtTime(m?0:.6,ac.currentTime,.05);},
+    shot(id){
+      if(id==="pm"){noise(.14,.5,"bandpass",2200,700,1.2);tone(.08,.3,"square",170,60);}
+      else if(id==="sg"){noise(.38,.85,"lowpass",2600,180,.8);tone(.25,.5,"sine",110,38);}
+      else{noise(.1,.45,"bandpass",2800,900,1.1);tone(.06,.28,"square",210,80);}
+    },
+    enemyShot(dist){const v=Math.max(.05,.35-dist/1200);noise(.1,v,"bandpass",1800,700,1);},
+    empty(){tone(.025,.15,"square",1900,1700);},
+    click(){tone(.02,.14,"square",1300,900);tone(.02,.12,"square",900,700,.06);},
+    reload(){tone(.03,.14,"square",700,500);noise(.05,.12,"highpass",3000,2500,1,.12);tone(.03,.16,"square",1100,800,.25);},
+    hit(){noise(.06,.18,"lowpass",900,300,1);},
+    hurt(){tone(.18,.25,"sawtooth",180,90);noise(.12,.2,"lowpass",700,200,1);},
+    boom(){noise(1.1,.95,"lowpass",900,60,.7);tone(.5,.6,"sine",70,28);},
+    throw(){noise(.12,.12,"bandpass",1200,2400,2);},
+    pickup(){tone(.08,.15,"triangle",660,990);tone(.1,.12,"triangle",990,1320,.07);}
+  };
+  return api;
+})();
+function toggleMute(){
+  settings.mute=!settings.mute;saveSettings();SFX.init();SFX.setMute(settings.mute);
+  $("bMute").textContent=settings.mute?"🔇":"🔊";
+}
+function saveSettings(){try{localStorage.setItem("zona.settings",JSON.stringify(settings));}catch(_){}}
+try{Object.assign(settings,JSON.parse(localStorage.getItem("zona.settings"))||{});}catch(_){}
+// browsers only allow sound after a user gesture
+["pointerdown","keydown"].forEach(ev=>addEventListener(ev,()=>{SFX.init();if(SFX.ctx&&SFX.ctx.state==="suspended")SFX.ctx.resume();},{passive:true}));
+
 // ---------- UAZ ----------
 const overlap=(a,b,m=0)=>a.x<b.x+b.w+m&&a.x+a.w+m>b.x&&a.y<b.y+b.h+m&&a.y+a.h+m>b.y;
 function carDamage(n){
@@ -595,26 +751,24 @@ function update(){
 
   // shooting
   p.cd-=dt;p.flash-=dt;p.recoil=Math.max(0,p.recoil-dt*20);
-  if(keys.fire&&p.cd<=0&&!driving()){
-    p.cd=.16;p.flash=.06;p.recoil=2;
-    bullets.push({x:p.face>0?p.x+p.w+14:p.x-14,y:p.y+16.5,vx:p.face*680,life:.7});
-    particles.push({x:p.x+p.w/2,y:p.y+16,vx:-p.face*(40+Math.random()*40),vy:-160-Math.random()*60,life:.5,col:"#d4a43a",sz:2});
-  }
+  if(p.autoReload>0){p.autoReload-=dt;if(p.autoReload<=0)startReload();}
+  weaponUpdate();
   for(const b of bullets){
-    b.x+=b.vx*dt;b.life-=dt;
-    if(solid(Math.floor(b.x/T),Math.floor(b.y/T))||b.y>surf(b.x)){b.life=0;burst(b.x,b.y,"#f3d27a",4,.5);continue;}
+    const sx=b.vx*dt, sy=b.vy*dt;b.x+=sx;b.y+=sy;b.dist+=Math.hypot(sx,sy);
+    if(b.dist>b.range){b.life=0;continue;}
+    if(solid(Math.floor(b.x/T),Math.floor(b.y/T))||b.y>surf(b.x)){b.life=0;burst(b.x,b.y,"#f3d27a",3,.4);continue;}
     for(const e of enemies){
-      if(e.alive&&b.x>e.x&&b.x<e.x+e.w&&b.y>e.y-2&&b.y<e.y+e.h+2){b.life=0;damage(e,1);burst(b.x,b.y,"#c94a43",4,.6);break;}
+      if(e.alive&&b.x>e.x&&b.x<e.x+e.w&&b.y>e.y-2&&b.y<e.y+e.h+2){
+        b.life=0;
+        const f=b.falloff, k=f?Math.max(f[2],Math.min(1,1-(b.dist-f[0])/(f[1]-f[0]))):1;
+        damage(e,Math.max(1,Math.round(b.dmg*k)),Math.sign(b.vx)*b.kick*k);
+        burst(b.x,b.y,"#c94a43",4,.6);SFX.hit();break;}
     }
   }
   bullets=bullets.filter(b=>b.life>0);
 
   // grenades
-  if(gReq){gReq=false;
-    if(st.items.grenade>0){st.items.grenade--;hud();
-      grenades.push({x:p.x+p.w/2+p.face*8,y:p.y+8,vx:p.face*270+p.vx*.5,vy:-390,fuse:1.3,rot:0});}
-    else texts.push({x:p.x+p.w/2,y:p.y-8,s:"Немає гранат",life:.9});
-  }
+  if(gReq){gReq=false;throwGrenade();}
   for(const n of grenades){
     n.fuse-=dt;n.vy=Math.min(n.vy+1300*dt,900);n.rot+=n.vx*dt*.08;
     n.x+=n.vx*dt;
@@ -658,7 +812,7 @@ function update(){
     else if(k.vy>0&&standable(tile(c,r))&&k.y+12-k.vy*dt<=r*T+1){k.y=r*T-12;k.vy=0;}
     const bd=body();
     if(Math.abs(bd.x+bd.w/2-(k.x+5))<bd.w/2+7&&Math.abs(bd.y+bd.h/2-(k.y+6))<22){k.taken=true;
-      st.items[k.kind]=(st.items[k.kind]||0)+k.n;if(k.map)pickedMap.push(k.map);hud();
+      st.items[k.kind]=(st.items[k.kind]||0)+k.n;if(k.map)pickedMap.push(k.map);hud();SFX.pickup();
       texts.push({x:k.x+5,y:k.y-6,s:`+${k.n} ${ITEM_NAMES[k.kind]}`,life:1});burst(k.x+5,k.y+6,"#c3d08a",8,.5);}
   }
   pickups=pickups.filter(k=>!k.taken&&k.y<VIEW_H+40);
@@ -683,7 +837,7 @@ function update(){
 
   for(const g of gems){
     if(g.taken)continue;
-    if(Math.abs(bd.x+bd.w/2-g.x)<bd.w/2+9&&Math.abs(bd.y+bd.h/2-g.y)<bd.h/2+8){g.taken=true;gemTotal++;hud();burst(g.x,g.y,g.col,10);}
+    if(Math.abs(bd.x+bd.w/2-g.x)<bd.w/2+9&&Math.abs(bd.y+bd.h/2-g.y)<bd.h/2+8){g.taken=true;gemTotal++;hud();burst(g.x,g.y,g.col,10);SFX.pickup();}
   }
 
   // enemies
@@ -703,9 +857,10 @@ function update(){
         if(e.alert){
           walk=false;e.face=dx>0?1:-1;e.cd-=dt;
           if(e.cd<=0){e.cd=1.3;e.flash=.07;
-            ebullets.push({x:e.x+e.w/2+e.face*26,y:e.y+e.h-11.5,vx:e.face*380,life:1.4});}
+            ebullets.push({x:e.x+e.w/2+e.face*26,y:e.y+e.h-11.5,vx:e.face*380,life:1.4});SFX.enemyShot(Math.abs(dx));}
         }else e.cd=Math.max(e.cd,.7);
       }
+      if(e.stun>0){e.stun-=dt;walk=false;}
       e.vx=walk?e.face*e.speed:0;
       if(moveX(e))e.face=-e.face;
       moveY(e);
@@ -718,7 +873,7 @@ function update(){
       if(!overlap(car,e))continue;
       if(Math.abs(car.vx)>90){
         const pushed=Math.sign(car.vx);
-        damage(e,e.type==="big"?3:99);carDamage(RAM_COST[e.type]);shake=.15;
+        damage(e,e.type==="big"?60:999);carDamage(RAM_COST[e.type]);shake=.15;
         burst(e.x+e.w/2,e.y+e.h/2,"#c94a43",8,.8);
         if(e.alive){car.vx=-pushed*200;car.vy=-160;e.x+=pushed*12;}
         if(e.alive||!car.drive)continue;
@@ -727,7 +882,7 @@ function update(){
       continue;
     }
     if(p.x<e.x+e.w&&p.x+p.w>e.x&&p.y<e.y+e.h&&p.y+p.h>e.y){
-      if(p.vy>0&&p.y+p.h-e.y<16){damage(e,2);p.vy=keys.jump?-560:-420;}
+      if(p.vy>0&&p.y+p.h-e.y<16){damage(e,CFG.stomp);p.vy=keys.jump?-560:-420;}
       else if(hurtP(CFG.dmg[e.type],{from:e.x+e.w/2}))return;
     }
   }
@@ -861,6 +1016,33 @@ function medkitSprite(x,y){
   ctx.fillStyle="#e9e6da";rr(x-7,y-6,14,11,2);ctx.fill();
   ctx.fillStyle="#c93a32";ctx.fillRect(x-1.5,y-4.5,3,8);ctx.fillRect(x-4.5,y-1.5,9,3);
   ctx.fillStyle="#8a877c";ctx.fillRect(x-3,y-8,6,2);
+}
+function drawPM(gx,gy,face,flash,recoil){
+  ctx.save();ctx.translate(gx-face*recoil,gy);ctx.scale(face,1);
+  ctx.fillStyle="#2b2b2b";ctx.fillRect(0,-3,12,4);ctx.fillStyle="#3a3a3a";ctx.fillRect(0,-3.5,12,1.2);
+  ctx.fillStyle="#5a3a22";ctx.beginPath();ctx.moveTo(1,1);ctx.lineTo(5,1);ctx.lineTo(4,7);ctx.lineTo(0,7);ctx.fill();
+  if(flash){ctx.fillStyle="#ffe08a";ctx.beginPath();ctx.moveTo(12,-1.2);ctx.lineTo(18,-3.5);ctx.lineTo(16,-1);ctx.lineTo(19,1.5);ctx.fill();}
+  ctx.restore();
+}
+function drawSG(gx,gy,face,flash,recoil){
+  ctx.save();ctx.translate(gx-face*recoil,gy);ctx.scale(face,1);
+  ctx.fillStyle="#6a4024";ctx.beginPath();ctx.moveTo(-6,-1);ctx.lineTo(2,-2.5);ctx.lineTo(2,2);ctx.lineTo(-5,5);ctx.fill();
+  ctx.fillStyle="#2e2e2e";ctx.fillRect(2,-4,18,2.6);ctx.fillRect(2,-1.3,18,2.6);ctx.fillStyle="#454545";ctx.fillRect(2,-4,18,.8);
+  ctx.fillStyle="#1d1d1d";ctx.fillRect(3,1,2.5,3.5);
+  if(flash){ctx.fillStyle="#ffcf7a";ctx.beginPath();ctx.moveTo(20,-3);ctx.lineTo(31,-8);ctx.lineTo(27,-1);ctx.lineTo(32,5);ctx.lineTo(21,1);ctx.fill();
+    ctx.fillStyle="#fff7d6";ctx.beginPath();ctx.arc(21.5,-1.3,2.6,0,7);ctx.fill();}
+  ctx.restore();
+}
+function drawGun(id,gx,gy,face,flash,recoil){
+  if(id==="pm")drawPM(gx,gy,face,flash,recoil);
+  else if(id==="sg")drawSG(gx,gy,face,flash,recoil);
+  else if(id==="ak")drawAK(gx,gy,face,flash,recoil);
+  else nadeSprite(gx+face*4,gy-2,0);
+}
+function ammoSprite(x,y,kind){
+  ctx.fillStyle="#3d4030";rr(x-7,y-5,14,10,2);ctx.fill();
+  ctx.fillStyle=AMMO_COL[kind]||"#c9a24a";for(let i=0;i<3;i++)ctx.fillRect(x-5+i*4,y-8,2.5,5);
+  ctx.fillStyle="rgba(255,255,255,.25)";ctx.fillRect(x-6,y-4,12,1.5);
 }
 function nadeSprite(x,y,rot){
   ctx.save();ctx.translate(x,y);ctx.rotate(rot);
@@ -1002,7 +1184,7 @@ function drawEnemy(e){
     if(e.type==="boar")boarLocal(e);else if(e.type==="dog")dogLocal(e);else if(e.type==="crow")crowLocal(e);else if(e.type==="rat")ratLocal(e);else stalkerLocal(e);}
   ctx.restore();
   if(!e.alive)return;
-  if(e.type==="big"||e.type==="stalker"){
+  {
     if(e.hp<e.max||e.type==="big"){ctx.fillStyle="rgba(0,0,0,.5)";ctx.fillRect(e.x,e.y-9,e.w,3);
       ctx.fillStyle="#d9493f";ctx.fillRect(e.x,e.y-9,e.w*e.hp/e.max,3);}
   }
@@ -1183,12 +1365,13 @@ function draw(){
   for(const k of pickups){const bob=k.vy===0?Math.sin(time*4+k.x)*1.5:0;
     ctx.shadowColor="#e5c33a";ctx.shadowBlur=8;
     if(k.kind==="medkit")medkitSprite(k.x+5,k.y+6+bob);
+    else if(AMMO_COL[k.kind])ammoSprite(k.x+5,k.y+7+bob,k.kind);
     else{nadeSprite(k.x+5,k.y+5+bob,0);if(k.n>1)nadeSprite(k.x+12,k.y+7+bob,.4);}
     ctx.shadowBlur=0;}
   for(const e of enemies){if(e.alive||e.dead<.5)drawEnemy(e);}
   if(car)drawCar();
   ctx.fillStyle="#ffe7a0";
-  for(const b of bullets)ctx.fillRect(b.x-(b.vx>0?8:0),b.y-1,8,2);
+  for(const b of bullets){if(b.pellet)ctx.fillRect(b.x-1.5,b.y-1.5,3,3);else ctx.fillRect(b.x-(b.vx>0?8:0),b.y-1,8,2);}
   ctx.fillStyle="#ff7a5a";
   for(const b of ebullets)ctx.fillRect(b.x-(b.vx>0?8:0),b.y-1,8,2);
   // player
@@ -1210,7 +1393,9 @@ function draw(){
     ctx.fillStyle="#5d625e";rr(fr?x+w-5:x-3,y+10-bob,8,6,2);ctx.fill();
     ctx.fillStyle="#3d413e";ctx.fillRect(fr?x+w-2:x,y+10-bob,1.5,6);
     const gx=fr?x+w-9:x+9, gy=y+18;
-    drawAK(gx,gy,p.face,p.flash>0,p.recoil);
+    const rl=p.reload>0?Math.sin(Math.min(1,p.reload/CFG.weapons[st.cur].reload)*Math.PI):0;
+    ctx.save();if(rl){ctx.translate(gx,gy);ctx.rotate(p.face*.6*rl);ctx.translate(-gx,-gy);}
+    drawGun(st.cur,gx,gy,p.face,p.flash>0,p.recoil);ctx.restore();
     ctx.fillStyle="#26261f";ctx.fillRect(gx-2-p.face*p.recoil,gy-1,4,4);
     ctx.fillStyle="#6b7036";ctx.fillRect(fr?gx+3:gx-9,gy-5,6,4);
     ctx.fillStyle="#26261f";ctx.fillRect(fr?gx+9-p.recoil:gx-12+p.recoil,gy-4,4,4);
@@ -1265,6 +1450,7 @@ resize();
 levelStart={st:clone(st),gemTotal,kills};build(0);ovAction=newGame;
 const best=loadBest();
 if(best)$("ovText").innerHTML+=`<br>Твій рекорд: ${best} артефактів.`;
+$("bMute").textContent=settings.mute?"🔇":"🔊";
 if(readSave()){$("ovBtn").textContent="Продовжити";ovAction=loadGame;$("ovBtn2").hidden=false;$("ovBtn2").textContent="Нова гра";ovAction2=newGame;}
 // leaving the tab pauses the game and keeps progress
 document.addEventListener("visibilitychange",()=>{
