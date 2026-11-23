@@ -1812,6 +1812,7 @@ function stalkerFrame(){
 }
 function drawStalker(){
   const im=sprImg("stalker"), name=stalkerFrame(), [sx,sy,sw,sh,ax,ay]=SPR.stalker[name], k=PS();
+  if(L.paint&&p.onGround)contactShadow(p.x+p.w/2,p.y+p.h,name==="st_dead"?26:15);
   ctx.save();
   // hit invulnerability: flicker instead of vanishing
   if(p.inv>0&&st.hp>0&&Math.floor(time*12)%2)ctx.globalAlpha=.45;
@@ -1834,6 +1835,7 @@ function drawUAZSprite(c,im){
   const U=SPR.uaz, k=c.w/U.w*1.016, spd=Math.min(1,Math.abs(c.vx)/200);
   // a little body sway on the move
   const bob=c.drive&&c.onGround?Math.sin(time*17+c.x*.05)*spd*1.6:0;
+  if(L.paint&&c.onGround)contactShadow(c.x+c.w/2,c.y+c.h,c.w*.55);
   ctx.save();ctx.translate(c.x+c.w/2,c.y+c.h+bob*k);ctx.rotate(c.ang+(c.drive?Math.sin(time*9)*.006*spd:0));ctx.scale(c.face*k,k);
   ctx.drawImage(im,-U.w/2,-U.ground,U.w,U.h);
   // wheels turn: the hub and sidewall of each painted wheel is redrawn rotated
@@ -2195,145 +2197,249 @@ function pipeV(g,x,y0,y1,d,s){
 }
 
 // ----- layers -----
+// painted props from the sprite sheet, used as static decoration (no physics)
+const PROPS=["cut/p_barrel_rad","cut/p_barrel","cut/p_crates","cut/p_barrier","cut/p_sign_rad","cut/p_lamp","cut/p_block","cut/p_fence","cut/p_bench"];
+function prop(g,n,x,base,h,flip,alpha=1){
+  const im=sprImg(n);if(!im)return;const k=h/im.height;
+  g.save();g.globalAlpha=alpha;g.translate(x,base);if(flip)g.scale(-1,1);g.drawImage(im,-im.width*k/2,-im.height*k,im.width*k,im.height*k);g.restore();
+}
+function conifer(g,x,base,h,col){
+  g.fillStyle=col;g.beginPath();g.moveTo(x,base-h);
+  for(let k=1;k<=5;k++){const y=base-h+h*k/5.4, w=h*.09*k;g.lineTo(x+w,y);g.lineTo(x+w*.45,y-h*.05);}
+  for(let k=5;k>=1;k--){const y=base-h+h*k/5.4, w=h*.09*k;g.lineTo(x-w*.45,y-h*.05);g.lineTo(x-w,y);}
+  g.closePath();g.fill();g.fillRect(x-1.5,base-h*.08,3,h*.08);
+}
+// stencilled lettering with worn paint (eroded on a scratch canvas so the wall stays intact)
+function stencil(g,txt,x,y,size,col,s,wear=1){
+  const R=2, w=Math.ceil(txt.length*size*.72+20), h=Math.ceil(size*1.4), c=document.createElement("canvas");c.width=w*R;c.height=h*R;
+  const t=c.getContext("2d");t.scale(R,R);t.font=`${size}px 'Russo One', Impact, 'Arial Black', sans-serif`;t.textAlign="center";t.textBaseline="middle";
+  t.fillStyle=col;t.fillText(txt,w/2,h/2);
+  t.globalCompositeOperation="destination-out";
+  for(let i=0;i<txt.length*40*wear;i++){t.fillStyle=`rgba(0,0,0,${.3+rnd(s+i)*.7})`;t.beginPath();t.arc(rnd(s+i*3)*w,rnd(s+i*5)*h,.4+rnd(s+i*7)*1.6,0,7);t.fill();}
+  g.save();g.globalAlpha=.8;g.drawImage(c,x-w/2,y-h/2,w,h);g.restore();
+}
+function poster(g,x,y,w,h,s,title,sub,band){
+  const pts=[[x,y],[x+w,y+2],[x+w-2,y+h*.72],[x+w-9,y+h],[x+2,y+h-1]];
+  wash(g,pts,"#bfb08c",s,{edge:.35,tex:.9});
+  g.save();hpoly(g,pts,s);g.clip();
+  g.fillStyle=band;g.globalAlpha=.75;g.fillRect(x,y+4,w,h*.28);g.globalAlpha=1;
+  g.fillStyle="#2b2117";g.font="800 6.5px Nunito, system-ui, sans-serif";g.textAlign="center";
+  g.fillText(title,x+w/2,y+4+h*.2);g.font="700 4.6px Nunito, system-ui, sans-serif";
+  sub.forEach((l,i)=>g.fillText(l,x+w/2,y+h*.5+i*6));
+  blot(g,x+w*.7,y+h*.75,w*.35,"rgba(90,60,25,.3)");
+  g.restore();
+  g.fillStyle="rgba(210,205,180,.75)";g.fillRect(x+w*.4,y-2,9,4);
+}
+function ivy(g,x,y,len,s){
+  g.strokeStyle="rgba(58,62,32,.9)";g.lineWidth=1;g.beginPath();g.moveTo(x,y);
+  for(let i=1;i<=8;i++)g.lineTo(x+Math.sin(s+i*1.3)*4,y+len*i/8);g.stroke();
+  for(let i=0;i<len/4;i++){const ly=y+rnd(s+i)*len, lx=x+Math.sin(s+ly/len*10.4)*4+(rnd(s+i*3)-.5)*8;
+    g.fillStyle=rnd(s+i*5)>.5?"rgba(92,104,48,.9)":"rgba(122,128,60,.85)";g.beginPath();g.ellipse(lx,ly,2.6,1.7,rnd(s+i*7)*3,0,7);g.fill();}
+}
+function cable(g,x0,y0,x1,y1,sag,w=1.2,col="rgba(28,22,16,.85)"){g.strokeStyle=col;g.lineWidth=w;g.beginPath();g.moveTo(x0,y0);g.quadraticCurveTo((x0+x1)/2,Math.max(y0,y1)+sag,x1,y1);g.stroke();}
+function moss(g,x,y,w,s){for(let i=0;i<w/5;i++){const mx=x+rnd(s+i)*w, my=y-rnd(s+i*3)*10;blot(g,mx,my,4+rnd(s+i*5)*7,rnd(s+i*7)>.5?"rgba(88,98,44,.45)":"rgba(110,116,52,.35)");}}
+function birch(g,x,base,h,s){
+  g.strokeStyle="#d8d2c0";g.lineWidth=3;g.beginPath();g.moveTo(x,base);g.quadraticCurveTo(x+4,base-h*.5,x+2,base-h);g.stroke();
+  for(let i=0;i<6;i++){g.fillStyle="#2a2620";g.fillRect(x-1.5+(i%2),base-h*(.1+i*.14),3,1.6);}
+  for(let i=0;i<16;i++){const a=rnd(s+i)*Math.PI*2, r=rnd(s+i*3)*h*.35;
+    g.fillStyle=rnd(s+i*5)>.4?"rgba(120,130,58,.85)":"rgba(160,150,70,.8)";g.beginPath();g.ellipse(x+2+Math.cos(a)*r,base-h*.85+Math.sin(a)*r*.6,3.2,2.2,a,0,7);g.fill();}
+}
+function rubble(g,x,base,w,s){
+  for(let i=0;i<w/5;i++){const bx=x+rnd(s+i)*w, bh=2+rnd(s+i*3)*4, by=base-rnd(s+i*5)*(w*.18)*(1-Math.abs(bx-x-w/2)/(w/2));
+    g.fillStyle=rnd(s+i*7)>.5?"#7a4a2c":"#5c5248";g.save();g.translate(bx,by);g.rotate((rnd(s+i*9)-.5)*1.2);g.fillRect(-bh,-bh/2,bh*2,bh);g.restore();}
+}
+function windowHole(g,x,y,w,h,s){
+  const pts=[[x,y+h],[x,y+w*.35],[x+w*.15,y+w*.12],[x+w*.5,y],[x+w*.85,y+w*.12],[x+w,y+w*.35],[x+w,y+h]];
+  // a real opening: the sky, the forest and the plant behind it are parallax layers
+  g.save();g.globalCompositeOperation="destination-out";hpoly(g,pts,s,true,.4);g.fill();g.restore();
+  g.save();hpoly(g,pts,s,true,.4);g.clip();
+  const cols=6,rows=6;
+  for(let i=0;i<cols;i++)for(let k=0;k<rows;k++){const r=rnd(s+i*17+k*31), px=x+i*w/cols, py=y+k*h/rows;
+    if(r>.55){g.fillStyle=`rgba(205,210,200,${r>.88?.5:.2})`;g.fillRect(px+1.5,py+1.5,w/cols-3,h/rows-3);}
+    else if(r>.45){g.fillStyle="rgba(215,220,210,.35)";g.beginPath();g.moveTo(px+2,py+2);g.lineTo(px+w/cols-2,py+2);g.lineTo(px+5,py+h/rows*.75);g.fill();}}
+  g.strokeStyle="#2b2721";g.lineWidth=2.2;g.beginPath();
+  for(let i=1;i<cols;i++){g.moveTo(x+i*w/cols,y);g.lineTo(x+i*w/cols,y+h);}
+  for(let k=1;k<rows;k++){g.moveTo(x,y+k*h/rows);g.lineTo(x+w,y+k*h/rows);}
+  g.stroke();g.restore();
+  hpoly(g,pts,s,true,.4);g.lineWidth=5;g.strokeStyle="#3a2a1c";g.stroke();g.lineWidth=1;g.strokeStyle=PAL.ink;g.stroke();
+  wash(g,box(x-6,y+h,w+12,6),"#6b5a44",s+3,{edge:.3});
+  for(let i=0;i<3;i++)ivy(g,x+12+rnd(s+i)*(w-24),y+8+rnd(s+i*2)*20,30+rnd(s+i*4)*50,s+i*11);
+}
+function ibeam(g,x,top,bot,s){
+  wash(g,box(x-9,top,18,bot-top),"#4a3a2a",s,{edge:.35});
+  g.fillStyle="rgba(150,95,55,.35)";g.fillRect(x-9,top,4,bot-top);g.fillStyle="rgba(20,12,6,.35)";g.fillRect(x+5,top,4,bot-top);
+  for(let y=top+10;y<bot;y+=16){g.fillStyle="#2b2117";g.beginPath();g.arc(x-5,y,1.1,0,7);g.arc(x+5,y,1.1,0,7);g.fill();}
+  rustStreaks(g,x-9,top,18,(bot-top)*.8,s,4);
+  wash(g,box(x-13,bot-10,26,10),"#3e3226",s+5,{edge:.3});
+}
+
+// ----- layers -----
 function paintSky(g,W){
-  const gr=g.createLinearGradient(0,0,0,VIEW_H);gr.addColorStop(0,PAL.sky0);gr.addColorStop(.55,PAL.sky1);gr.addColorStop(1,PAL.sky2);
+  // cool daylight outside the warm, dim hall
+  const gr=g.createLinearGradient(0,0,0,VIEW_H);gr.addColorStop(0,"#7f8b93");gr.addColorStop(.5,"#b8beb8");gr.addColorStop(1,"#dcd6c6");
   g.fillStyle=gr;g.fillRect(0,0,W,VIEW_H);
-  for(let i=0;i<26;i++){const x=rnd(i+400)*W, y=20+rnd(i+430)*130, rx=60+rnd(i+460)*120, ry=14+rnd(i+490)*22;
-    g.fillStyle=`rgba(${rnd(i)>.4?"222,210,192":"120,108,96"},${.18+rnd(i+520)*.2})`;
-    g.beginPath();g.ellipse(x,y,rx,ry,0,0,7);g.fill();if(x+rx>W){g.beginPath();g.ellipse(x-W,y,rx,ry,0,0,7);g.fill();}}
-  g.globalAlpha=.5;g.fillStyle=pat(g);g.fillRect(0,0,W,VIEW_H);g.globalAlpha=1;
+  for(let i=0;i<30;i++){const x=rnd(i+400)*W, y=10+rnd(i+430)*150, rx=50+rnd(i+460)*130, ry=12+rnd(i+490)*24, lt=rnd(i)>.35;
+    g.fillStyle=lt?`rgba(238,236,228,${.35+rnd(i+520)*.3})`:`rgba(96,104,110,${.2+rnd(i+520)*.2})`;
+    for(const dx of [0,-W,W])if(x+dx+rx>0&&x+dx-rx<W){g.beginPath();g.ellipse(x+dx,y,rx,ry,0,0,7);g.fill();}}
+  g.globalAlpha=.45;g.fillStyle=pat(g);g.fillRect(0,0,W,VIEW_H);g.globalAlpha=1;
 }
 function paintFar(g,W){
   const hz=262;
-  // cooling tower, chimneys, a truss bridge, a skyline and poplars, all soaked in mist
-  for(const [cx,top,wb] of [[190,120,120],[1300,150,95]]){
-    const pts=[[cx-wb/2,hz],[cx-wb*.36,top+60],[cx-wb*.3,top],[cx+wb*.3,top],[cx+wb*.36,top+60],[cx+wb/2,hz]];
-    wash(g,pts,PAL.far2,cx,{ink:.5,edge:.12});
-    g.fillStyle="rgba(240,232,220,.18)";g.beginPath();g.ellipse(cx-wb*.12,top+40,wb*.08,50,0,0,7);g.fill();
-  }
-  for(const [x,top] of [[380,60],[1460,90]]){
-    wash(g,box(x,top,13,hz-top),PAL.far,x,{ink:.5,edge:.1});
-    for(let y=top+8;y<hz-20;y+=34){g.fillStyle="rgba(150,70,50,.35)";g.fillRect(x,y,13,10);}
-    for(let i=0;i<5;i++){g.fillStyle=`rgba(200,190,176,${.25-i*.04})`;g.beginPath();g.ellipse(x+10+i*22,top-8-i*10,14+i*8,8+i*3,0,0,7);g.fill();}
-  }
-  truss(g,520,960,176,16,520,"rgba(110,100,88,.85)");
-  for(const x of [560,700,840,940]){g.strokeStyle="rgba(110,100,88,.85)";g.lineWidth=3;g.beginPath();g.moveTo(x,192);g.lineTo(x-10,hz);g.moveTo(x,192);g.lineTo(x+10,hz);g.stroke();}
-  let x=980;while(x<1270){const w=30+rnd(x)*60, h=40+rnd(x+1)*90;wash(g,box(x,hz-h,w,h),PAL.far,x,{ink:.35,edge:.1});x+=w-4;}
-  for(const [px,n] of [[470,4],[1110,5],[1560,3]])for(let i=0;i<n;i++){const tx=px+i*16, th=70+rnd(px+i)*50;
-    g.fillStyle="rgba(95,98,78,.75)";g.beginPath();g.ellipse(tx,hz-th/2,7,th/2,0,0,7);g.fill();}
-  const mg=g.createLinearGradient(0,150,0,hz+30);mg.addColorStop(0,"rgba(214,204,188,0)");mg.addColorStop(1,"rgba(214,204,188,.6)");
-  g.fillStyle=mg;g.fillRect(0,150,W,hz+30-150);
+  // the power plant on the horizon: reactor block with a striped vent stack, a cooling tower, pylons, all in haze
+  const nx=420;
+  wash(g,[[nx,hz],[nx,hz-70],[nx+40,hz-96],[nx+190,hz-96],[nx+230,hz-70],[nx+230,hz]],"#8a8f91",nx,{ink:.4,edge:.1});
+  for(let i=0;i<8;i++){g.fillStyle="rgba(70,76,80,.35)";g.fillRect(nx+50+i*18,hz-92,3,22);}
+  wash(g,box(nx+150,hz-210,16,114),"#888d8e",nx+150,{ink:.45,edge:.1});
+  for(let y=hz-200;y<hz-110;y+=22){g.fillStyle="rgba(150,80,60,.35)";g.fillRect(nx+150,y,16,9);}
+  g.strokeStyle="rgba(90,95,98,.8)";g.lineWidth=1.2;g.beginPath();g.moveTo(nx+136,hz-96);g.lineTo(nx+150,hz-210);g.moveTo(nx+180,hz-96);g.lineTo(nx+166,hz-210);
+  for(let y=hz-200;y<hz-100;y+=14){const k=(hz-96-y)/114;g.moveTo(nx+136+k*14,y);g.lineTo(nx+180-k*14,y);}g.stroke();
+  {const cx=1180,top=150,wb=120;wash(g,[[cx-wb/2,hz],[cx-wb*.36,top+60],[cx-wb*.3,top],[cx+wb*.3,top],[cx+wb*.36,top+60],[cx+wb/2,hz]],"#969a98",cx,{ink:.4,edge:.1});
+    for(let i=0;i<5;i++){g.fillStyle=`rgba(225,226,222,${.3-i*.05})`;g.beginPath();g.ellipse(cx+6+i*16,top-10-i*12,20+i*10,9+i*4,0,0,7);g.fill();}}
+  for(const px of [180,860,1480]){g.strokeStyle="rgba(95,100,102,.8)";g.lineWidth=1.4;g.beginPath();g.moveTo(px-14,hz);g.lineTo(px,hz-110);g.lineTo(px+14,hz);
+    g.moveTo(px-20,hz-90);g.lineTo(px+20,hz-90);g.moveTo(px-26,hz-104);g.lineTo(px+26,hz-104);g.stroke();}
+  // the forest line
+  for(let i=0;i<70;i++){const h=40+rnd(i+3100)*55, x=h*.5+rnd(i+3000)*(W-h);conifer(g,x,hz+4,h,`rgba(${74+rnd(i)*14|0},${88+rnd(i+1)*14|0},80,.85)`);}
+  const mg=g.createLinearGradient(0,140,0,hz+30);mg.addColorStop(0,"rgba(214,214,206,0)");mg.addColorStop(1,"rgba(214,214,206,.55)");
+  g.fillStyle=mg;g.fillRect(0,140,W,hz+30-140);
 }
 function paintMid(g,W){
-  const gy=292;
-  // ruined workshops, a gantry crane, poles with sagging wires, bare trees
-  let x=40;
-  while(x<W-60){const w=110+rnd(x)*130, h=70+rnd(x+3)*80;
-    wash(g,box(x,gy-h,w,h),rnd(x+9)>.5?PAL.mid:PAL.mid2,x,{edge:.18,ink:.6});
-    for(let wy=gy-h+12;wy<gy-14;wy+=18)for(let wx=x+8;wx<x+w-12;wx+=16)if(rnd(wx*3+wy)>.35){g.fillStyle="rgba(35,30,24,.55)";g.fillRect(wx,wy,9,11);}
-    rustStreaks(g,x,gy-h,w,h,x,4);
-    x+=w+40+rnd(x+5)*120;}
-  g.strokeStyle="rgba(60,50,40,.9)";g.lineWidth=3;g.beginPath();g.moveTo(620,gy);g.lineTo(640,120);g.lineTo(820,120);g.moveTo(800,gy);g.lineTo(790,120);g.stroke();
-  truss(g,600,860,112,12,620,"rgba(80,58,40,.95)");g.lineWidth=1;g.beginPath();g.moveTo(760,124);g.lineTo(760,180);g.stroke();
-  for(const px of [180,520,900,1080]){g.strokeStyle="rgba(50,42,34,.9)";g.lineWidth=2.5;g.beginPath();g.moveTo(px,gy);g.lineTo(px+2,gy-120);g.moveTo(px-12,gy-110);g.lineTo(px+14,gy-112);g.stroke();
-    g.lineWidth=.8;g.beginPath();g.moveTo(px-12,gy-110);g.quadraticCurveTo(px+80,gy-80,px+170,gy-108);g.stroke();}
-  for(const tx of [300,980,1150])deadTree(g,tx,gy,120,tx,"rgba(45,36,28,.85)",3);
-  const mg=g.createLinearGradient(0,200,0,gy+10);mg.addColorStop(0,"rgba(200,190,172,0)");mg.addColorStop(1,"rgba(200,190,172,.5)");g.fillStyle=mg;g.fillRect(0,200,W,gy+10-200);
+  const gy=294;
+  // overgrown ruins of the neighbouring workshops, poles with sagging wires
+  for(const [x,w,h] of [[60,180,110],[560,150,140],[930,210,90]]){
+    wash(g,box(x,gy-h,w,h),"#6a665b",x,{edge:.18,ink:.55});
+    for(let wy=gy-h+12;wy<gy-14;wy+=18)for(let wx=x+8;wx<x+w-12;wx+=16)if(rnd(wx*3+wy)>.35){g.fillStyle="rgba(30,32,30,.55)";g.fillRect(wx,wy,9,11);}
+    rustStreaks(g,x,gy-h,w,h,x,4);}
+  for(let i=0;i<14;i++){const r=26+rnd(i+3360)*22, x=r+rnd(i+3300)*(W-2*r), h=90+rnd(i+3330)*90;
+    g.strokeStyle="rgba(40,36,28,.9)";g.lineWidth=3;g.beginPath();g.moveTo(x,gy);g.lineTo(x+(rnd(i)-.5)*8,gy-h*.7);g.stroke();
+    for(let k=0;k<34;k++){const a=rnd(i*31+k)*Math.PI*2, d=Math.sqrt(rnd(i*37+k))*r, bx=x+Math.cos(a)*d*1.1, by=gy-h+r*.6+Math.sin(a)*d*.8;
+      const lt=by<gy-h+r*.4, c=lt?[116,118,86]:[78,86,64];
+      g.fillStyle=`rgba(${c[0]+rnd(i+k)*14|0},${c[1]+rnd(i*3+k)*14|0},${c[2]},.62)`;g.beginPath();g.ellipse(bx,by,5+rnd(i*5+k)*6,3.5+rnd(i*7+k)*4,rnd(k)*3,0,7);g.fill();}}
+  for(let i=0;i<8;i++){const h=80+rnd(i+3410)*60, x=h*.5+rnd(i+3400)*(W-h);conifer(g,x,gy,h,"rgba(52,62,50,.92)");}
+  for(const px of [300,800,1160]){g.strokeStyle="rgba(40,36,30,.9)";g.lineWidth=2.5;g.beginPath();g.moveTo(px,gy);g.lineTo(px+2,gy-130);g.moveTo(px-12,gy-120);g.lineTo(px+14,gy-122);g.stroke();
+    g.lineWidth=.8;g.beginPath();g.moveTo(px-12,gy-120);g.quadraticCurveTo(px+60,gy-95,px+130,gy-110);g.stroke();}
+  const mg=g.createLinearGradient(0,190,0,gy+10);mg.addColorStop(0,"rgba(205,205,195,0)");mg.addColorStop(1,"rgba(205,205,195,.45)");g.fillStyle=mg;g.fillRect(0,190,W,gy+10-190);
 }
-// the world plane: everything behind the stalker that never moves
+// the world plane: everything behind the stalker that never moves (geometry positions match L.plats, objects and tiles)
 function paintScene(g){
-  const H0=440, H1=2290, top=58;
-  // perimeter fence with an open rusty gate and a guard booth
-  for(let x=0;x<430;x+=64){if(x>140&&x<270)continue;wash(g,box(x,250,62,70),PAL.concrete,x+7,{edge:.25});g.fillStyle="rgba(60,45,25,.25)";g.fillRect(x,250,62,6);rustStreaks(g,x,252,62,60,x,3);}
+  const H0=440, H1=2290, top=58, W=L.w*T;
+  // --- yard by the entrance: concrete fence, the raised barrier, a guard booth, signs
+  for(let x=0;x<430;x+=64){if(x>140&&x<270)continue;wash(g,box(x,250,62,70),PAL.concrete,x+7,{edge:.25});g.fillStyle="rgba(60,45,25,.25)";g.fillRect(x,250,62,6);rustStreaks(g,x,252,62,60,x,3);moss(g,x,320,62,x);}
   g.strokeStyle=PAL.ink;g.lineWidth=.8;g.beginPath();for(let x=0;x<430;x+=8){g.moveTo(x,248);g.lineTo(x+4,242);g.lineTo(x+8,248);}g.stroke();
   wash(g,box(140,214,14,106),PAL.concreteDk,140);wash(g,box(262,214,14,106),PAL.concreteDk,262);
-  wash(g,[[154,232],[200,240],[200,320],[154,320]],PAL.rust,151,{edge:.35});
-  for(let y=246;y<316;y+=12){g.fillStyle=PAL.hazard;g.globalAlpha=.6;g.fillRect(156,y,40,5);g.globalAlpha=1;}
-  rustStreaks(g,154,232,46,80,152,8);
-  // guard booth
+  stencil(g,"ЗОНА ВІДЧУЖЕННЯ",60,280,9,"#c9b48a",71);
   wash(g,box(296,226,104,94),PAL.plaster,296,{edge:.3});wash(g,box(290,216,116,12),PAL.concreteDk,290);
   wash(g,box(312,248,30,26),"#3a3328",312);g.fillStyle="rgba(255,210,130,.45)";g.fillRect(314,250,26,22);
   wash(g,box(352,250,28,70),PAL.oliveDk,352);rustStreaks(g,296,226,104,94,296,6);
-  // the hall
-  wash(g,box(H0,top,H1-H0,320-top),PAL.plaster,H0,{edge:.25,tex:1.2});
-  const shade=g.createLinearGradient(0,top,0,320);shade.addColorStop(0,"rgba(40,30,18,.25)");shade.addColorStop(.55,"rgba(40,30,18,0)");shade.addColorStop(1,"rgba(40,30,18,.4)");
-  g.fillStyle=shade;g.fillRect(H0,top,H1-H0,320-top);
-  for(let i=0;i<34;i++){const x=H0+rnd(i+700)*(H1-H0), y=top+30+rnd(i+730)*200, w=26+rnd(i+760)*70, h=14+rnd(i+790)*40;
-    if(rnd(i+800)>.72){const pts=[];for(let k=0;k<9;k++){const a=k/9*Math.PI*2, r=.5+rnd(i*9+k)*.5;pts.push([x+w/2+Math.cos(a)*w/2*r,y+h/2+Math.sin(a)*h/2*r]);}
-      g.save();hpoly(g,pts,i,true,4);g.clip();g.fillStyle=PAL.brick;g.fillRect(x,y,w,h);
-      g.strokeStyle="rgba(50,30,15,.6)";g.lineWidth=.8;for(let by=y;by<y+h;by+=6){g.beginPath();g.moveTo(x,by);g.lineTo(x+w,by);g.stroke();for(let bx=x+((by-y)/6%2)*8;bx<x+w;bx+=16){g.beginPath();g.moveTo(bx,by);g.lineTo(bx,by+6);g.stroke();}}
-      g.restore();hpoly(g,pts,i,true,4);g.strokeStyle="rgba(43,33,23,.5)";g.lineWidth=.8;g.stroke();}
-    else blot(g,x+w/2,y+h/2,w*.7,"rgba(60,42,20,.2)");}
-  rustStreaks(g,H0,top,H1-H0,260,H0,60);
-  g.fillStyle="rgba(50,38,22,.35)";g.fillRect(H0,286,H1-H0,34);
-  // pilasters and roof trusses
-  for(let x=H0;x<=H1;x+=256){wash(g,box(x-10,top,20,262),PAL.concreteDk,x,{edge:.3});rustStreaks(g,x-10,top,20,200,x+1,3);}
-  truss(g,H0,H1,top-28,26,H0,PAL.rust);
-  for(let x=H0;x<H1;x+=170+rnd(x)*60){g.fillStyle="rgba(60,52,40,.85)";g.fillRect(x,top-36,40+rnd(x+3)*50,8);}
-  // tall broken windows
-  for(const wx of [560,1010,1400,1690])windowFrame(g,wx,96,150,150,wx,true);
-  // pipes: along the wall, down into the generator, the panel risers, the outlet to the pool
+  poster(g,322,280,24,30,301,"СТІЙ!",["ПЕРЕПУСТКИ"],"#9a3a2a");
+  birch(g,420,320,90,420);
+  prop(g,"cut/p_barrier",206,322,36);prop(g,"cut/p_sign_rad",110,322,40);prop(g,"cut/p_lamp",276,322,62,true);
+  // --- the hall: dark warm walls, plaster falling off the brick
+  wash(g,box(H0,top,H1-H0,320-top),"#5b4a37",H0,{edge:.25,tex:1.1});
+  for(let i=0;i<22;i++){const x=H0+rnd(i+1700)*(H1-H0), y=top+20+rnd(i+1730)*170, w=60+rnd(i+1760)*120, h=40+rnd(i+1790)*70;
+    const pts=[];for(let k=0;k<10;k++){const a=k/10*Math.PI*2, r=.55+rnd(i*9+k)*.45;pts.push([x+Math.cos(a)*w/2*r,y+Math.sin(a)*h/2*r]);}
+    wash(g,pts,rnd(i)>.5?"#7a6448":"#6d5a42",i+1800,{edge:.2,ink:.3,j:4});}
+  for(let i=0;i<20;i++){const x=H0+rnd(i+700)*(H1-H0), y=top+30+rnd(i+730)*200, w=26+rnd(i+760)*60, h=14+rnd(i+790)*34;
+    const pts=[];for(let k=0;k<9;k++){const a=k/9*Math.PI*2, r=.5+rnd(i*9+k)*.5;pts.push([x+w/2+Math.cos(a)*w/2*r,y+h/2+Math.sin(a)*h/2*r]);}
+    g.save();hpoly(g,pts,i,true,4);g.clip();g.fillStyle="#7c4a2e";g.fillRect(x,y,w,h);
+    g.strokeStyle="rgba(40,24,12,.65)";g.lineWidth=.8;for(let by=y;by<y+h;by+=6){g.beginPath();g.moveTo(x,by);g.lineTo(x+w,by);g.stroke();for(let bx=x+((by-y)/6%2)*8;bx<x+w;bx+=16){g.beginPath();g.moveTo(bx,by);g.lineTo(bx,by+6);g.stroke();}}
+    g.restore();hpoly(g,pts,i,true,4);g.strokeStyle="rgba(43,33,23,.6)";g.lineWidth=.8;g.stroke();}
+  rustStreaks(g,H0,top,H1-H0,260,H0,70);
+  const sh=g.createLinearGradient(0,top,0,320);sh.addColorStop(0,"rgba(20,12,6,.45)");sh.addColorStop(.45,"rgba(20,12,6,0)");sh.addColorStop(.85,"rgba(20,12,6,.15)");sh.addColorStop(1,"rgba(20,12,6,.5)");
+  g.fillStyle=sh;g.fillRect(H0,top,H1-H0,320-top);
+  // the factory's name and its emblem, a sun with rays
+  {const ex=1236, ey=124;g.save();g.globalAlpha=.6;g.fillStyle="#a8412a";g.beginPath();g.arc(ex,ey,14,Math.PI,0);g.fill();
+    for(let i=0;i<9;i++){const a=Math.PI+(i+.5)*Math.PI/9;g.beginPath();g.moveTo(ex+Math.cos(a-.06)*17,ey+Math.sin(a-.06)*17);g.lineTo(ex+Math.cos(a)*40,ey+Math.sin(a)*40);g.lineTo(ex+Math.cos(a+.06)*17,ey+Math.sin(a+.06)*17);g.fill();}
+    g.restore();stencil(g,"ЗАВОД",1312,80,20,"#e2d3ac",1291,.45);stencil(g,"«ПРОМІНЬ»",1312,106,17,"#e2d3ac",1292,.45);}
+  poster(g,1100,176,30,40,1101,"УВАГА!",["ПРАЦЮЮТЬ","ЛЮДИ"],"#b0842a");
+  poster(g,1590,186,30,38,1591,"НАПРУГА",["НЕ ВМИКАТИ!"],"#a33a26");
+  poster(g,930,150,28,36,931,"ТЕХНІКА",["БЕЗПЕКИ","понад усе"],"#3e6a4a");
+  // columns, conduits, junction boxes, cables hanging from the trusses
+  for(let x=H0;x<=H1;x+=256)ibeam(g,x,top,320,x);
+  pipeH(g,H0,H1,92,5,92);
+  for(const x of [700,1080,1360,1600,1860]){wash(g,box(x,84,16,20),PAL.steel,x,{edge:.3});g.fillStyle="#2b2721";g.fillRect(x+4,90,8,4);cable(g,x+8,104,x+8+(rnd(x)-.5)*30,140+rnd(x+1)*40,8);}
+  for(let x=H0+40;x<H1-80;x+=150+rnd(x)*80)cable(g,x,34,x+90+rnd(x+3)*60,40,18+rnd(x+5)*30,1.1);
+  // the roof: trusses against the sky, hanging sheets of corrugated iron
+  truss(g,H0,H1,top-28,26,H0,"#6e4224");
+  for(let x=H0;x<H1;x+=170+rnd(x)*60){const w=40+rnd(x+3)*50;wash(g,[[x,top-36],[x+w,top-34],[x+w-6,top-24+rnd(x)*10],[x+4,top-28]],"#4a3d30",x,{edge:.3,ink:.6});}
+  // tall windows, cut through
+  for(const wx of [560,1010,1400,1690])windowHole(g,wx,96,150,150,wx);
+  // ivy coming down from the trusses
+  for(let i=0;i<9;i++){const x=H0+30+rnd(i+2100)*(H1-H0-60);ivy(g,x,top-4,30+rnd(i+2130)*70,i*13+2100);}
+  // pipes: along the wall, into the generator, the panel risers, the outlet to the pool
   pipeH(g,1080,2000,146,16,1080);
   pipeV(g,1205,146,250,24,1205);wash(g,[[1193,134],[1217,134],[1217,158],[1193,158]],PAL.rustDk,1199);
   pipeV(g,1532,100,296,10,1532);pipeV(g,1548,100,296,10,1548);
   pipeH(g,1548,1618,262,14,1880);pipeV(g,1612,262,304,14,1886);
-  // stairs and the catwalk (they are walkways in L.plats)
+  wash(g,box(1754,138,14,16),"#3a2c20",1754,{edge:.3});
+  // stairs and the catwalk (walkways in L.plats): rusty steel, grating, rivets
   const s0=[544,320], s1=[736,224];
-  for(const x of [760,880,1010]){wash(g,box(x-3,224,6,96),PAL.steel,x,{edge:.3});}
-  g.strokeStyle=PAL.rustDk;g.lineWidth=1.4;g.beginPath();g.moveTo(760,232);g.lineTo(880,312);g.moveTo(880,232);g.lineTo(760,312);g.moveTo(880,232);g.lineTo(1010,312);g.moveTo(1010,232);g.lineTo(880,312);g.stroke();
-  wash(g,[[s0[0],s0[1]],[s1[0],s1[1]],[s1[0],s1[1]+7],[s0[0]+10,s0[1]]],PAL.rust,544,{edge:.35});
-  for(let i=1;i<12;i++){const t=i/12, x=s0[0]+(s1[0]-s0[0])*t, y=s0[1]+(s1[1]-s0[1])*t;g.fillStyle=PAL.rustDk;g.fillRect(x-7,y-1,14,3);}
-  wash(g,box(736,224,288,7),PAL.rust,736,{edge:.35});
-  g.strokeStyle=PAL.rustLt;g.lineWidth=2;g.beginPath();g.moveTo(552,290);g.lineTo(736,194);g.lineTo(1024,194);g.stroke();
-  for(let x=736;x<=1024;x+=32){g.beginPath();g.moveTo(x,194);g.lineTo(x,224);g.stroke();}
-  for(let i=1;i<6;i++){const t=i/6, x=s0[0]+(s1[0]-s0[0])*t, y=s0[1]+(s1[1]-s0[1])*t;g.beginPath();g.moveTo(x+6,y-32);g.lineTo(x+6,y);g.stroke();}
+  for(const x of [760,880,1010])ibeam(g,x,224,320,x+9);
+  g.strokeStyle="#4a2e16";g.lineWidth=1.6;g.beginPath();g.moveTo(760,232);g.lineTo(880,312);g.moveTo(880,232);g.lineTo(760,312);g.moveTo(880,232);g.lineTo(1010,312);g.moveTo(1010,232);g.lineTo(880,312);g.stroke();
+  wash(g,[[s0[0],s0[1]],[s1[0],s1[1]],[s1[0],s1[1]+8],[s0[0]+12,s0[1]]],"#7c4a26",544,{edge:.35});
+  for(let i=1;i<12;i++){const t=i/12, x=s0[0]+(s1[0]-s0[0])*t, y=s0[1]+(s1[1]-s0[1])*t;g.fillStyle="#3a2414";g.fillRect(x-8,y-1.5,16,3);g.fillStyle="rgba(200,140,80,.4)";g.fillRect(x-8,y-1.5,16,1);}
+  wash(g,box(736,224,288,8),"#7c4a26",736,{edge:.35});
+  g.strokeStyle="rgba(40,24,10,.55)";g.lineWidth=.7;g.beginPath();for(let x=740;x<1022;x+=5){g.moveTo(x,225);g.lineTo(x+3,231);}g.stroke();
+  g.strokeStyle="#b0703a";g.lineWidth=2.2;g.beginPath();g.moveTo(552,290);g.lineTo(736,194);g.lineTo(1024,194);g.moveTo(552,302);g.lineTo(736,208);g.lineTo(1024,208);g.stroke();
+  g.lineWidth=1.6;g.beginPath();for(let x=736;x<=1024;x+=32){g.moveTo(x,194);g.lineTo(x,224);}
+  for(let i=1;i<6;i++){const t=i/6, x=s0[0]+(s1[0]-s0[0])*t, y=s0[1]+(s1[1]-s0[1])*t;g.moveTo(x+6,y-32);g.lineTo(x+6,y);}g.stroke();
   g.globalAlpha=.7;g.strokeStyle=PAL.ink;g.lineWidth=.8;g.beginPath();g.moveTo(552,289);g.lineTo(736,193);g.lineTo(1024,193);g.stroke();g.globalAlpha=1;
-  // a door on the catwalk and its junction boxes
-  wash(g,box(782,156,42,68),"#7a7440",782,{edge:.35});wash(g,box(776,150,54,8),PAL.concreteDk,776);
-  g.fillStyle=PAL.ink;g.fillRect(816,190,4,3);rustStreaks(g,782,156,42,68,783,4);
-  for(const [x,y] of [[700,170],[728,170]]){wash(g,box(x,y,20,26),PAL.steel,x,{edge:.3});g.fillStyle="#3a3a30";g.fillRect(x+4,y+6,12,6);}
-  // crates and a workbench under the catwalk
-  for(const [x,y,w,h,c] of [[770,288,40,32,PAL.olive],[812,296,34,24,PAL.oliveDk],[776,262,30,26,PAL.olive],[960,300,30,20,PAL.oliveDk]]){
-    wash(g,box(x,y,w,h),c,x+y,{edge:.3});g.strokeStyle="rgba(40,30,15,.5)";g.lineWidth=1;g.beginPath();g.moveTo(x+3,y+h/2);g.lineTo(x+w-3,y+h/2);g.stroke();}
+  // the door on the catwalk, its lamp bracket and junction boxes
+  wash(g,box(782,156,42,68),"#6f6d3e",782,{edge:.35});wash(g,box(776,150,54,8),PAL.concreteDk,776);
+  g.strokeStyle="rgba(30,30,15,.5)";g.lineWidth=1;g.strokeRect(788,166,30,22);g.fillStyle=PAL.ink;g.fillRect(816,192,4,3);rustStreaks(g,782,156,42,68,783,4);
+  for(const [x,y] of [[700,170],[728,170]]){wash(g,box(x,y,20,26),PAL.steel,x,{edge:.3});g.fillStyle="#3a3a30";g.fillRect(x+4,y+6,12,6);g.fillStyle="#c9a031";g.fillRect(x+7,y+15,6,5);}
+  // under the catwalk: crates, barrels, a workbench, rubble
+  prop(g,"cut/p_crates",790,320,30);prop(g,"cut/p_barrel_rad",842,320,26);prop(g,"cut/p_crates",975,320,24,true);
   wash(g,box(880,280,70,6),PAL.rust,880);wash(g,box(884,286,5,34),PAL.rustDk,884);wash(g,box(941,286,5,34),PAL.rustDk,941);
   wash(g,box(896,268,24,12),"#9a3a2a",896);
-  // concrete plinth under the generator
-  wash(g,box(1150,298,190,22),PAL.concrete,1150,{edge:.3});
-  // the recess around the gates and hazard paint on the wall base
-  wash(g,box(1972,118,92,202),"#3b342a",1972,{edge:.45});
-  for(let x=1880;x<2120;x+=24){g.fillStyle="rgba(201,160,49,.5)";g.beginPath();g.moveTo(x,312);g.lineTo(x+12,312);g.lineTo(x+4,320);g.lineTo(x-8,320);g.fill();}
-  // beyond the hall: chain-link fence, a dead tree
-  for(let x=H1+20;x<84*32;x+=90){wash(g,box(x,240,5,80),PAL.steel,x,{ink:.7});}
-  g.strokeStyle="rgba(60,55,45,.55)";g.lineWidth=.6;g.beginPath();
-  for(let x=H1+20;x<84*32;x+=7){g.moveTo(x,244);g.lineTo(x+7,252);g.moveTo(x+7,244);g.lineTo(x,252);}
-  g.stroke();g.globalAlpha=.25;g.fillStyle="#5e584c";g.fillRect(H1+20,244,84*32-H1-20,72);g.globalAlpha=1;
+  rubble(g,600,320,60,600);rubble(g,1380,320,70,1380);rubble(g,1840,320,50,1840);
+  // concrete plinth under the generator, oil on the floor
+  wash(g,box(1150,298,190,22),"#7a6648",1150,{edge:.3});
+  // the gate recess with hazard paint on the wall base
+  wash(g,box(1972,118,92,202),"#2c261f",1972,{edge:.45});
+  for(let x=1880;x<2120;x+=24){g.fillStyle="rgba(201,160,49,.55)";g.beginPath();g.moveTo(x,312);g.lineTo(x+12,312);g.lineTo(x+4,320);g.lineTo(x-8,320);g.fill();}
+  stencil(g,"ВИХІД",2018,108,11,"#c9a031",2018);
+  prop(g,"cut/p_barrel",1915,320,26);prop(g,"cut/p_barrel_rad",2150,320,26,true);
+  // a young birch has pushed through the hall floor
+  birch(g,1065,320,74,1065);
+  // beyond the hall: fence, barrels, a dead tree, the bench
+  for(let x=H1+30;x<W-40;x+=74)prop(g,"cut/p_fence",x,322,58);
+  prop(g,"cut/p_block",2400,322,30);prop(g,"cut/p_bench",2560,322,22);
   deadTree(g,2470,320,170,2470,PAL.ink,5);
-  // ground: concrete slabs following the terrain, seams, cracks, puddles, dry grass
-  const W=L.w*T;g.beginPath();g.moveTo(0,VIEW_H);for(let x=0;x<=W;x+=4)g.lineTo(x,groundY(x));g.lineTo(W,VIEW_H);g.closePath();
+  // ground: dark worn concrete inside, lighter outside; seams, cracks, oil, puddles, moss, grass
+  g.beginPath();g.moveTo(0,VIEW_H);for(let x=0;x<=W;x+=4)g.lineTo(x,groundY(x));g.lineTo(W,VIEW_H);g.closePath();
   g.fillStyle=PAL.concrete;g.fill();g.save();g.clip();g.fillStyle=pat(g);g.fill();
-  const dg=g.createLinearGradient(0,300,0,VIEW_H);dg.addColorStop(0,"rgba(255,235,200,.12)");dg.addColorStop(1,"rgba(40,28,14,.45)");g.fillStyle=dg;g.fillRect(0,280,W,VIEW_H-280);
-  g.strokeStyle="rgba(45,32,18,.5)";g.lineWidth=1;
+  g.fillStyle="rgba(30,20,10,.32)";g.fillRect(H0,300,H1-H0,VIEW_H-300);
+  const dg=g.createLinearGradient(0,300,0,VIEW_H);dg.addColorStop(0,"rgba(255,235,200,.10)");dg.addColorStop(1,"rgba(30,20,10,.5)");g.fillStyle=dg;g.fillRect(0,280,W,VIEW_H-280);
+  g.strokeStyle="rgba(35,24,12,.55)";g.lineWidth=1;
   for(let x=0;x<W;x+=64){const y=groundY(x);g.beginPath();g.moveTo(x,y);g.lineTo(x-3,VIEW_H);g.stroke();}
-  for(let i=0;i<60;i++){const x=rnd(i+900)*W, y=groundY(x)+6+rnd(i+930)*40;g.beginPath();g.moveTo(x,y);g.lineTo(x+8+rnd(i)*14,y+4);g.lineTo(x+12+rnd(i+1)*20,y+1);g.stroke();}
-  for(const [px,pw] of [[300,70],[690,50],[1420,90],[2390,60]]){const y=groundY(px)+5;g.fillStyle="rgba(150,150,140,.45)";g.beginPath();g.ellipse(px,y,pw/2,4,0,0,7);g.fill();
-    g.fillStyle="rgba(230,225,210,.35)";g.fillRect(px-pw/4,y-1,pw/3,1.5);}
-  // the pit walls: broken concrete
+  for(let i=0;i<70;i++){const x=rnd(i+900)*W, y=groundY(x)+6+rnd(i+930)*40;g.beginPath();g.moveTo(x,y);g.lineTo(x+8+rnd(i)*14,y+4);g.lineTo(x+12+rnd(i+1)*20,y+1);g.stroke();}
+  for(let i=0;i<12;i++){const x=H0+rnd(i+950)*(H1-H0);blot(g,x,BASE+10+rnd(i+960)*20,14+rnd(i+970)*18,"rgba(15,10,5,.35)");}
+  for(const [px,pw] of [[300,70],[690,50],[1420,90],[2390,60]]){const y=groundY(px)+6;g.fillStyle="rgba(120,128,128,.5)";g.beginPath();g.ellipse(px,y,pw/2,4.5,0,0,7);g.fill();
+    g.fillStyle="rgba(230,228,215,.35)";g.fillRect(px-pw/4,y-1,pw/3,1.5);}
   g.fillStyle="rgba(40,30,20,.35)";g.beginPath();g.moveTo(50*T,BASE);for(let x=50*T;x<=57*T;x+=4)g.lineTo(x,groundY(x));g.lineTo(57*T,BASE+60);g.lineTo(50*T,BASE+60);g.fill();
   g.restore();
   g.strokeStyle=PAL.ink;g.lineWidth=1.1;g.globalAlpha=.8;g.beginPath();for(let x=0;x<=W;x+=4){const y=groundY(x);x?g.lineTo(x,y):g.moveTo(x,y);}g.stroke();g.globalAlpha=1;
-  for(let i=0;i<70;i++){const x=rnd(i+1000)*W;if(x>50*T-10&&x<57*T+10)continue;const inside=x>H0&&x<H1;if(inside&&rnd(i+1)>.3)continue;grassTuft(g,x,groundY(x)+1,i+1000,inside?9:16);}
+  for(let x=0;x<W;x+=90+rnd(x)*80){if(x>50*T-20&&x<57*T+20)continue;moss(g,x,groundY(x)+2,30+rnd(x+1)*40,x);}
+  for(let i=0;i<80;i++){const x=rnd(i+1000)*W;if(x>50*T-10&&x<57*T+10)continue;const inside=x>H0&&x<H1;if(inside&&rnd(i+1)>.35)continue;grassTuft(g,x,groundY(x)+1,i+1000,inside?10:17);}
 }
-// near foreground, in front of everything: grass, a barrel, broken slabs (parallax 1.25)
+// near foreground silhouettes, in front of everything but below the floor line (parallax 1.25)
 function paintFront(g,W){
-  for(let i=0;i<22;i++){const x=rnd(i+1200)*W;grassTuft(g,x,VIEW_H+2,i+1200,22+rnd(i+1230)*18,PAL.grassLt);}
-  for(const [x,w] of [[130,90],[520,70],[880,110]]){wash(g,[[x,VIEW_H],[x+6,VIEW_H-16],[x+w*.6,VIEW_H-22],[x+w,VIEW_H-10],[x+w,VIEW_H]],PAL.concreteDk,x,{edge:.35});}
-  g.save();g.translate(700,VIEW_H-6);g.rotate(-.35);wash(g,box(-14,-26,28,34),PAL.rust,700,{edge:.35});g.strokeStyle=PAL.rustDk;g.lineWidth=2;g.beginPath();g.moveTo(-14,-16);g.lineTo(14,-16);g.moveTo(-14,-2);g.lineTo(14,-2);g.stroke();g.restore();
+  const dk="rgba(22,17,11,.94)";
+  for(let i=0;i<26;i++){const x=rnd(i+1200)*W;grassTuft(g,x,VIEW_H+2,i+1200,18+rnd(i+1230)*16,i%3?"#3a3220":"#5a4a28");}
+  for(const [x,w] of [[110,100],[520,80],[860,120]]){g.fillStyle=dk;g.beginPath();g.moveTo(x,VIEW_H);g.lineTo(x+8,VIEW_H-18);g.lineTo(x+w*.55,VIEW_H-26);g.lineTo(x+w,VIEW_H-12);g.lineTo(x+w,VIEW_H);g.fill();}
+  // a bent railing and rebar sticking out of a slab
+  g.strokeStyle=dk;g.lineCap="round";g.lineWidth=3;g.beginPath();
+  for(const x of [320,350,380])g.moveTo(x,VIEW_H),g.lineTo(x+(x===380?8:0),VIEW_H-48);
+  g.moveTo(314,VIEW_H-44);g.quadraticCurveTo(350,VIEW_H-52,392,VIEW_H-38);g.stroke();
+  g.lineWidth=1.6;g.beginPath();for(let i=0;i<5;i++){const x=600+i*9;g.moveTo(x,VIEW_H-14);g.lineTo(x+(i-2)*5,VIEW_H-40-rnd(i)*14);}g.stroke();
 }
 function paintCanvas(wu,R,fn){const c=document.createElement("canvas");c.width=Math.ceil(wu*R);c.height=Math.ceil(VIEW_H*R);const g=c.getContext("2d");g.scale(R,R);fn(g);return c;}
 function paintEnsure(){
   const R=Math.min(2,Math.max(1,dpr*scale));
+  const ready=PROPS.every(n=>sprImg(n));
+  if(paint&&paint.ready!==ready){paint.old=paint.chunks;paint.chunks=[];paint.ready=ready;}
   if(paint&&Math.abs(paint.R-R)<.01)return;
-  paint={R,chunks:[],
+  paint={R,ready,chunks:[],
     sky:paintCanvas(1600,R*.5,g=>paintSky(g,1600)),
     far:paintCanvas(1600,R*.75,g=>paintFar(g,1600)),
     mid:paintCanvas(1300,R*.85,g=>paintMid(g,1300)),
@@ -2345,7 +2451,16 @@ function strip(c,W,par,y=0){
 }
 function paintBg(){
   paintEnsure();
+  // inside the hall the background only shows through the windows and the roof: draw just those parts
+  const H0=440-camX, H1=2290-camX;
+  ctx.save();ctx.beginPath();
+  ctx.rect(0,0,viewW,60);
+  if(H0>0)ctx.rect(0,0,Math.min(viewW,H0),VIEW_H);
+  if(H1<viewW)ctx.rect(Math.max(0,H1),0,viewW-Math.max(0,H1),VIEW_H);
+  for(const wx of [560,1010,1400,1690]){const x=wx-camX;if(x<viewW&&x+150>0)ctx.rect(x-2,94,154,154);}
+  ctx.clip();
   strip(paint.sky,1600,.03);strip(paint.far,1600,.12);strip(paint.mid,1300,.35);
+  ctx.restore();
 }
 // world chunks are painted the first time they come near the camera, at most one per frame
 function paintWorld(){
@@ -2354,20 +2469,29 @@ function paintWorld(){
   for(let i=a;i<=b;i++){
     if(!paint.chunks[i]&&made<1&&(i*CHUNK<camX+viewW&&(i+1)*CHUNK>camX||!made)){
       paint.chunks[i]=paintCanvas(CHUNK,paint.R,g=>{g.translate(-i*CHUNK,0);paintScene(g);});made++;}
-    if(paint.chunks[i])ctx.drawImage(paint.chunks[i],i*CHUNK,0,CHUNK,VIEW_H);
+    // until a chunk is repainted, its previous version stays on screen
+    const c=paint.chunks[i]||paint.old&&paint.old[i];
+    if(c)ctx.drawImage(c,i*CHUNK,0,CHUNK,VIEW_H);
   }
 }
 function paintFrontLayer(){strip(paint.front,1000,1.25);}
 
 // ----- things painted every frame: machines, the gate, the pool, lights -----
 function lamp(x,y,on,flick=0){
-  const k=on?1:flick?(.25+.25*(Math.sin(time*23)>0.6?1:0)):0;
-  ctx.strokeStyle=PAL.ink;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y-34);ctx.lineTo(x,y-8);ctx.stroke();
-  ctx.fillStyle="#3b3328";ctx.beginPath();ctx.moveTo(x-12,y);ctx.quadraticCurveTo(x,y-14,x+12,y);ctx.closePath();ctx.fill();
-  ctx.fillStyle=k?`rgba(255,217,138,${.5+.5*k})`:"#5a5040";ctx.beginPath();ctx.arc(x,y+1,3,0,7);ctx.fill();
-  if(k){blot(ctx,x,y+4,46,`rgba(255,210,130,${.35*k})`);
-    const g=ctx.createLinearGradient(0,y,0,BASE);g.addColorStop(0,`rgba(255,215,140,${.16*k})`);g.addColorStop(1,"rgba(255,215,140,0)");
-    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(x-9,y+2);ctx.lineTo(x+9,y+2);ctx.lineTo(x+60,BASE);ctx.lineTo(x-60,BASE);ctx.closePath();ctx.fill();}
+  // a working lamp burns steadily with a rare dip; the broken one stutters
+  const n=Math.sin(time*13+x)*Math.sin(time*7.3+x*.3);
+  const k=on?(n>.93?.55:.93+.07*Math.sin(time*40+x)):flick?(Math.sin(time*23)>.6?.5:.08):0;
+  ctx.strokeStyle=PAL.ink;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,56);ctx.lineTo(x,y-10);ctx.stroke();
+  ctx.fillStyle="#6b5a40";ctx.fillRect(x-2,y-14,4,5);
+  ctx.fillStyle="#2f2820";ctx.beginPath();ctx.moveTo(x-13,y);ctx.quadraticCurveTo(x,y-17,x+13,y);ctx.closePath();ctx.fill();
+  ctx.strokeStyle="rgba(200,150,90,.5)";ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(x-11,y-2);ctx.quadraticCurveTo(x-4,y-11,x+2,y-12);ctx.stroke();
+  ctx.fillStyle=k>.1?`rgba(255,224,156,${.5+.5*k})`:"#5a5040";ctx.beginPath();ctx.arc(x,y+1,3.2,0,7);ctx.fill();
+  if(k>.1){blot(ctx,x,y+4,50,`rgba(255,205,120,${.32*k})`);
+    const g=ctx.createLinearGradient(0,y,0,BASE);g.addColorStop(0,`rgba(255,212,140,${.18*k})`);g.addColorStop(1,"rgba(255,212,140,.02)");
+    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(x-10,y+2);ctx.lineTo(x+10,y+2);ctx.lineTo(x+66,BASE);ctx.lineTo(x-66,BASE);ctx.closePath();ctx.fill();
+    // the warm pool it throws on the floor
+    ctx.save();ctx.translate(x,BASE+4);ctx.scale(1,.16);blot(ctx,0,0,80,`rgba(255,200,120,${.3*k})`);ctx.restore();}
+  return k;
 }
 function needIcon(x,y,need){
   const b=.5+.5*Math.sin(time*5);
@@ -2476,14 +2600,57 @@ function drawLights(){
   const on=!!FL().genOn;
   for(const [x,fl] of [[620,0],[1230,0],[1650,1]])lamp(x,96,on,fl);
   lamp(803,146,1);
-  blot(ctx,147,214,30,"rgba(255,210,130,.35)");blot(ctx,269,214,30,"rgba(255,210,130,.35)");
-  // dusty light through the tall windows
+  // daylight through the tall windows, with dust drifting in it (a fixed 10 motes per beam)
   for(const wx of [560,1010,1400,1690]){
-    const g=ctx.createLinearGradient(wx,120,wx+140,BASE);g.addColorStop(0,"rgba(255,240,210,.10)");g.addColorStop(1,"rgba(255,240,210,0)");
-    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(wx+20,110);ctx.lineTo(wx+130,110);ctx.lineTo(wx+230,BASE);ctx.lineTo(wx+90,BASE);ctx.closePath();ctx.fill();}
+    if(wx+240<camX||wx>camX+viewW)continue;
+    const g=ctx.createLinearGradient(wx,120,wx+140,BASE);g.addColorStop(0,"rgba(236,240,225,.13)");g.addColorStop(1,"rgba(236,240,225,0)");
+    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(wx+20,110);ctx.lineTo(wx+130,110);ctx.lineTo(wx+230,BASE);ctx.lineTo(wx+90,BASE);ctx.closePath();ctx.fill();
+    for(let i=0;i<10;i++){const v=(rnd(wx+i)+time*(.012+rnd(wx+i*3)*.02))%1, u=rnd(wx+i*7);
+      const x=wx+20+70*v+u*(110+30*v)+Math.sin(time*.6+i)*6, y=110+v*(BASE-110);
+      ctx.fillStyle=`rgba(255,250,230,${.35+.3*Math.sin(time*2+i)})`;ctx.fillRect(x,y,1.3,1.3);}
+  }
+  // steam from a leaking joint on the big pipe
+  if(1700<camX+viewW&&1800>camX)for(let i=0;i<10;i++){const a=(time*.45+i/10)%1, x=1761+a*26+Math.sin(time*2+i)*3, y=140-a*70, r=3+a*16;
+    ctx.fillStyle=`rgba(228,228,218,${.2*(1-a)})`;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();}
   // the crane hook sways on its chain
   const hx=1380+Math.sin(time*.8)*4;ctx.strokeStyle=PAL.ink;ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(1380,40);ctx.lineTo(hx,150);ctx.stroke();
   ctx.strokeStyle="#9a5a26";ctx.lineWidth=3.5;ctx.beginPath();ctx.arc(hx,160,8,-.3,3.6);ctx.stroke();
+}
+// interior light: the hall is dim until the generator runs; windows, lamps, the machines and the stalker
+// keep their light. Low-resolution mask, the same trick as the night.
+let hallCv=null, hctx=null;
+function hallLighting(){
+  const H0=440, H1=2290;
+  if(camX+viewW<H0||camX>H1)return;
+  if(!hallCv){hallCv=document.createElement("canvas");hctx=hallCv.getContext("2d");}
+  const LS=4, lw=Math.ceil(cv.width/LS), lh=Math.ceil(cv.height/LS);
+  if(hallCv.width!==lw||hallCv.height!==lh){hallCv.width=lw;hallCv.height=lh;}
+  const l=hctx, f=FL(), on=!!f.genOn, sx=x=>x-camX;
+  l.setTransform(dpr*scale/LS,0,0,dpr*scale/LS,0,0);l.globalCompositeOperation="source-over";l.clearRect(0,0,viewW,VIEW_H);
+  l.fillStyle=`rgba(18,11,4,${on?.28:.5})`;l.fillRect(sx(H0),40,H1-H0,VIEW_H-40);
+  l.globalCompositeOperation="destination-out";
+  const hole=(x,y,r,a)=>{const g=l.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,`rgba(0,0,0,${a})`);g.addColorStop(1,"rgba(0,0,0,0)");l.fillStyle=g;l.fillRect(x-r,y-r,r*2,r*2);};
+  for(const wx of [560,1010,1400,1690]){const x=sx(wx);if(x<-260||x>viewW+60)continue;
+    l.fillStyle="rgba(0,0,0,.95)";l.fillRect(x,100,150,146);hole(x+120,BASE-40,110,.55);}
+  for(const [x,fl] of [[620,0],[1230,0],[1650,1]]){const k=on?1:fl?.4:0;if(k)hole(sx(x),130,on?160:70,.8*k);}
+  hole(sx(803),160,70,.7);
+  for(const o of objs)hole(sx(o.x),o.floor-44,62,.7);
+  const bd=body();hole(sx(bd.x+bd.w/2),bd.y+bd.h/2-6,driving()?80:56,.6);
+  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(hallCv,0,0,cv.width,cv.height);ctx.restore();
+  ctx.setTransform(dpr*scale,0,0,dpr*scale,0,0);
+}
+// a soft contact shadow grounds the painted sprites in the painted location
+function contactShadow(x,y,rx){ctx.save();ctx.translate(x,y);ctx.scale(1,.22);blot(ctx,0,0,rx,"rgba(10,6,2,.45)");ctx.restore();}
+// "ДІЯ — …" prompts and need-icons; on painted locations they go on top of machines and lighting
+function drawPrompts(){
+  const o=objNear(), os=o&&objState(o);
+  if(os&&os.need)needIcon(o.x,o.floor-({locker:66,generator:104,panel:112,valve:88,gate:120}[o.kind]||90),os.need);
+  const s=os?(os.use?os.label:""):nearTrader()?"торговець":nearStash()?"відкрити схованку":"";
+  // above the head of the tall painted stalker
+  const ty=artOn()&&sprImg("stalker")?p.y+p.h-54:p.y-22;
+  const say=(t,col)=>{ctx.font="800 12px Nunito, system-ui, sans-serif";ctx.textAlign="center";ctx.fillStyle="#1b1e18";ctx.fillText(t,p.x+p.w/2+1,ty+1);ctx.fillStyle=col;ctx.fillText(t,p.x+p.w/2,ty);};
+  if(os&&!os.use)say(os.label,"#d8cfb8");
+  if(s)say((touchUI?"ДІЯ — ":"E — ")+s,"#e8f0b0");
 }
 function paintedProp(k){
   if(k.kind==="canister"){const x=k.x+5,y=k.y+2;wash(ctx,[[x-8,y-6],[x+8,y-6],[x+8,y+10],[x-8,y+10]],"#a8362a",31,{edge:.3,tex:.5});
@@ -2653,12 +2820,7 @@ function draw(){
     ctx.fillStyle="#e5c33a";ctx.beginPath();ctx.moveTo(sx,sy-62);ctx.lineTo(sx+13,sy-40);ctx.lineTo(sx-13,sy-40);ctx.closePath();ctx.fill();
     trefoil(sx,sy-47,6,"#1d1a08","#e5c33a");
   }
-  {const o=objNear(), os=o&&objState(o);
-    if(os&&os.need)needIcon(o.x,o.floor-({locker:66,generator:104,panel:112,valve:88,gate:120}[o.kind]||90),os.need);
-    const s=os?(os.use?os.label:""):nearTrader()?"торговець":nearStash()?"відкрити схованку":"";
-    if(os&&!os.use){ctx.font="800 12px Nunito, system-ui, sans-serif";ctx.textAlign="center";ctx.fillStyle="#1b1e18";ctx.fillText(os.label,p.x+p.w/2+1,p.y-21);ctx.fillStyle="#d8cfb8";ctx.fillText(os.label,p.x+p.w/2,p.y-22);}
-    if(s){const t=(touchUI?"ДІЯ — ":"E — ")+s;ctx.font="800 12px Nunito, system-ui, sans-serif";ctx.textAlign="center";
-      ctx.fillStyle="#1b1e18";ctx.fillText(t,p.x+p.w/2+1,p.y-21);ctx.fillStyle="#e8f0b0";ctx.fillText(t,p.x+p.w/2,p.y-22);}}
+  if(!L.paint)drawPrompts();
   // checkpoint lanterns
   for(const c of L.cps){
     const x=c*T+16, on=cpCol>=c;
@@ -2756,7 +2918,7 @@ function draw(){
   for(const s of texts){ctx.globalAlpha=Math.min(1,s.life*2);ctx.fillStyle="#1b1e18";ctx.fillText(s.s,s.x+1,s.y+1);ctx.fillStyle=s.col||"#e8f0b0";ctx.fillText(s.s,s.x,s.y);}
   ctx.globalAlpha=1;
   ctx.restore();
-  if(L.paint)paintFrontLayer();
+  if(L.paint){hallLighting();ctx.save();ctx.translate(-Math.round(camX),0);drawPrompts();ctx.restore();paintFrontLayer();}
   if(wx.fog&&!L.sub)fogBand(VIEW_H-90,90,wx.fog*.7,.25);
   if(wx.rain&&!L.sub)drawRain();
   if(wx.night&&!L.sub)drawNight();
@@ -2794,7 +2956,8 @@ function frame(now){
 document.addEventListener("visibilitychange",()=>{last=performance.now();for(const k in keys)keys[k]=false;});
 
 resize();
-["stalker","weapons","uaz"].forEach(sprImg);
+["stalker","weapons","uaz"].forEach(sprImg);PROPS.forEach(sprImg);
+if(document.fonts)document.fonts.ready.then(()=>{if(paint){paint.old=paint.chunks;paint.chunks=[];}});
 // the first screen only shows the level behind the card; nothing is saved until the player picks
 levelStart={st:clone(st),gemTotal,kills};build(0);ovAction=newGame;
 const best=loadBest();
