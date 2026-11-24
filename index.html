@@ -89,6 +89,31 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .wpanel button.cur{border-color:var(--rad);box-shadow:inset 0 0 0 1px var(--rad)}
 .mute,.bag{background:var(--panel);border-color:var(--line);color:var(--text)}
 .radstat{color:var(--rad)}
+.mapcard{max-width:520px}
+.zmap{position:relative;margin:0 12px;aspect-ratio:1/1;max-height:min(52vh,420px);border-radius:10px;overflow:hidden;border:1px solid var(--line);
+  background:radial-gradient(circle at 30% 60%,rgba(90,100,60,.55),transparent 40%),radial-gradient(circle at 75% 30%,rgba(70,80,50,.5),transparent 35%),
+  radial-gradient(circle at 70% 15%,rgba(160,60,40,.25),transparent 18%),linear-gradient(160deg,#3d3a2a,#2a2b20)}
+.zmap::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:10% 10%}
+.zmap svg{position:absolute;inset:0;width:100%;height:100%}
+.zmap .river{fill:none;stroke:rgba(120,150,160,.45);stroke-width:2.2}
+.zmap .river.thin{stroke-width:1.2}
+.zmap .route{stroke:rgba(200,190,150,.25);stroke-width:.8;stroke-dasharray:2 2}
+.zmap .route.open{stroke:rgba(229,195,58,.8)}
+.zmap .node{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:0;padding:6px;cursor:pointer;
+  color:var(--text);font:800 11px var(--body);touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.zmap .node i{width:14px;height:14px;border-radius:50%;background:#6d6a3e;border:2px solid var(--muted);box-shadow:0 0 0 3px rgba(0,0,0,.35)}
+.zmap .node span{background:rgba(18,20,15,.78);padding:2px 6px;border-radius:6px;white-space:nowrap}
+.zmap .node.locked{opacity:.45}
+.zmap .node.done i{background:#7fe08a}
+.zmap .node.here i{background:var(--rad);box-shadow:0 0 0 3px rgba(229,195,58,.35),0 0 12px var(--rad)}
+.zmap .node.sel span{outline:2px solid var(--rad)}
+.mapinfo{padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px}
+.mapinfo b{font:400 16px var(--display);color:var(--rad)}
+.mapinfo p{margin:0;color:var(--muted);font-size:13px;line-height:1.4}
+.mapinfo p.warn{color:#ffb09a}
+.mapbtns{display:flex;gap:8px}
+.mapbtns .btn{flex:1;padding:10px 8px;font-size:14px}
+.mapbtns .btn:disabled{opacity:.45}
 .pda{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 24px);display:flex;gap:8px;align-items:baseline;
   background:rgba(18,26,16,.92);border:1px solid #5a7a4a;border-radius:10px;padding:8px 12px;color:#cfe8b0;font-size:13px;font-weight:800;z-index:2;pointer-events:none}
 .pda b{font:400 11px var(--display);color:#7fe08a;letter-spacing:.08em}
@@ -140,6 +165,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <div class="stat" title="Гранати"><span class="nade-ico" aria-hidden="true"></span><span id="nades">1</span></div>
       <div class="stat radstat" id="radStat" title="Радіація" hidden>☢ <span id="radNum">0</span></div>
       <div class="stat bleedstat" id="bleedStat" title="Кровотеча — потрібен бинт" hidden>🩸<span id="bleedNum"></span></div>
+      <button class="hudbtn bag" id="bMap" title="Карта Зони (O)" aria-label="Відкрити карту Зони">🗺</button>
       <button class="hudbtn bag" id="bInv" title="Рюкзак (I)" aria-label="Відкрити рюкзак">🎒</button>
       <button class="hudbtn mute" id="bMute" title="Звук (M)" aria-label="Увімкнути або вимкнути звук">🔊</button>
       <div class="stat" id="carStat" title="Стан УАЗа" hidden><span class="car-ico">УАЗ</span><span class="carbar"><i id="carBar"></i></span></div>
@@ -149,6 +175,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
     <canvas id="c" aria-label="Ігрове поле"></canvas>
     <div class="pda" id="pda" hidden role="status" aria-live="polite"><b>КПК</b><span id="pdaText"></span></div>
     <div class="wpanel" id="wpanel" hidden aria-label="Вибір зброї"></div>
+    <div class="inv" id="map" hidden>
+      <div class="invcard mapcard" role="dialog" aria-label="Карта Зони">
+        <div class="invhead"><b>Карта Зони</b><span id="mapStat"></span><button class="invx" id="mapClose" aria-label="Закрити">✕</button></div>
+        <div class="zmap" id="zmap"></div>
+        <div class="mapinfo" id="mapInfo"></div>
+      </div>
+    </div>
     <div class="inv" id="inv" hidden>
       <div class="invcard" role="dialog" aria-label="Рюкзак">
         <div class="invhead"><b id="invTitle">Рюкзак</b><span id="invW"></span><button class="invx" id="invClose" aria-label="Закрити">✕</button></div>
@@ -160,7 +193,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
     <div class="overlay" id="ov">
       <div class="card">
         <h1 id="ovTitle">Зона відчуження</h1>
-        <p id="ovText">Шість локацій від Залісся до ЧАЕС. Стріляй, кидай болти в аномалії, тарань мутантів на УАЗі й перелітай ями з трамплінів. Шукай схованки, продавай артефакти, а коли КПК попередить про викид — біжи в укриття.</p>
+        <p id="ovText">Сім локацій від заводу «Промінь» до ЧАЕС. Починаєш із ПМ і шкірянкою — кращу зброю й броню купуй у торговців або забирай у бандитів. Між локаціями ходи пішки (дорогою нападуть) або їдь на УАЗі (потрібен бензин). Шукай схованки, продавай артефакти, а коли КПК попередить про викид — біжи в укриття.</p>
         <div class="diff" id="diff" hidden role="radiogroup" aria-label="Складність"></div>
         <button class="btn" id="ovBtn">Увійти в Зону</button>
         <button class="btn ghost" id="ovBtn2" hidden></button>
@@ -217,7 +250,17 @@ const CFG={
   },
   weightMax:40, overloadSpeed:.72,
   // what the trader sells: [item, pack size, price ₴]; artifacts are bought at ITEMS[..].val
-  shop:[["medkit",1,150],["bandage",1,50],["antirad",1,120],["repair",1,300],["grenade",1,200],["9x18",16,60],["12x70",10,90],["5.45x39",30,140]],
+  // armour: share of damage it takes away (phys = bites, claws, bullets; anom = anomalies), rad = slower radiation, slow = speed loss
+  armor:{
+    jacket:{name:"Шкірянка новачка", phys:0, anom:0, rad:0, slow:0, price:0, w:2},
+    vest:{name:"Бронежилет", phys:.2, anom:0, rad:0, slow:0, price:900, w:6},
+    suit:{name:"Комбінезон сталкера", phys:.3, anom:.3, rad:.4, slow:0, price:2400, w:7},
+    heavy:{name:"Важкий бронекостюм", phys:.45, anom:.2, rad:.25, slow:.12, price:5200, w:14}
+  },
+  weaponPrice:{sg:700, ak:2200},
+  // travelling across the Zone map: on foot you get attacked on the way, the UAZ burns petrol per map distance
+  travel:{foot:[.15,.2], minHp:5, fuelPerUnit:.17, tank:40},
+  shop:[["fuel",10,150],["medkit",1,150],["bandage",1,50],["antirad",1,120],["repair",1,300],["grenade",1,200],["9x18",16,60],["12x70",10,90],["5.45x39",30,140]],
   // blowout: first comes [min,max] s after entering a location, then repeats; warn = time to reach a shelter
   blowout:{first:[75,140], again:[200,280], warn:30, active:12, dps:7, rad:4, artifacts:3, maxShelterDist:2400},
   // falloff:[full-damage distance, zero-point distance, minimum share]
@@ -243,6 +286,7 @@ const ITEMS={
   grenade:{name:"Граната РГД-5", short:"гран.", w:.4},
   canister:{name:"Каністра з пальним", short:"каністра", w:2, desc:"Для генератора"},
   fuse:{name:"Запобіжник", short:"запобіжник", w:.1, desc:"Для електрощитка"},
+  fuel:{name:"Бензин для УАЗа", short:"л бензину", w:0},
   "9x18":{name:"Набої 9×18 (ПМ)", short:"набоїв 9×18", w:.01},
   "12x70":{name:"Набої 12/70 (обріз)", short:"набоїв 12 кал.", w:.04},
   "5.45x39":{name:"Набої 5,45×39 (АК)", short:"набоїв 5,45", w:.012},
@@ -253,6 +297,7 @@ const ITEMS={
   art4:{name:"Душа", short:"Душа", w:.1, val:120, col:"#ff6f61", art:true}
 };
 const WEAPON_W={pm:.7, sg:2.4, ak:3.3};
+const ZMAP={"Завод «Промінь»":[18,84],"Залісся":[42,75],"Рудий ліс":[22,55],"Прип'ять":[55,42],"Станція Янів":[80,56],"Радар «Дуга»":[34,22],"ЧАЕС":[70,14]};
 // PDA tasks: progress() reads the stalker's counters; reward is added once
 const QUESTS=[
   {id:"art1", name:"Перший артефакт", desc:"Знайди будь-який артефакт", goal:1, progress:()=>gemTotal, reward:{money:100}},
@@ -263,9 +308,14 @@ const QUESTS=[
   {id:"power", name:"Електрик", desc:"Подай живлення на ворота заводу", goal:1, progress:()=>st.flags&&st.flags["Завод «Промінь»"]&&st.flags["Завод «Промінь»"].gateOpen?1:0, reward:{money:250, bandage:1}},
   {id:"psi", name:"Голова на плечах", desc:"Знищ контролера", goal:1, progress:()=>st.killsBy.controller||0, reward:{money:700, antirad:2}}
 ];
-const freshSt=()=>({hp:CFG.player.maxHp, rad:0, bleed:0, money:0, sold:0, killsBy:{}, opened:[], quests:{}, flags:{}, cur:"ak", wpn:{pm:{mag:8},sg:{mag:2},ak:{mag:30}},
-  items:{medkit:2, bandage:2, antirad:1, repair:1, grenade:2, "9x18":32, "12x70":10, "5.45x39":60}});
-const carried=()=>Object.entries(st.items).reduce((s,[k,n])=>s+(ITEMS[k]?ITEMS[k].w*n:0),0)+Object.values(WEAPON_W).reduce((a,b)=>a+b,0);
+// a new stalker starts poor: a PM, a leather jacket, a little money; the UAZ waits at the factory
+const freshSt=()=>({hp:CFG.player.maxHp, rad:0, bleed:0, money:150, sold:0, killsBy:{}, opened:[], quests:{}, flags:{}, cur:"pm",
+  owned:{pm:1}, armor:"jacket", fuel:10, car:{at:"Завод «Промінь»",hp:100}, open:1, done:[], taken:{},
+  wpn:{pm:{mag:8},sg:{mag:0},ak:{mag:0}},
+  items:{medkit:2, bandage:1, antirad:0, repair:0, grenade:1, "9x18":40, "12x70":0, "5.45x39":0}});
+const armorOf=()=>CFG.armor[st.armor]||CFG.armor.jacket;
+const carried=()=>Object.entries(st.items).reduce((s,[k,n])=>s+(ITEMS[k]?ITEMS[k].w*n:0),0)
+  +Object.keys(WEAPON_W).reduce((a,id)=>a+(st.owned[id]?WEAPON_W[id]:0),0)+armorOf().w;
 const clone=o=>JSON.parse(JSON.stringify(o));
 const ART_COLORS=["#8fe0d0","#f2a640","#c78bff","#7fd36a","#ff6f61"];
 const THEMES={
@@ -291,7 +341,7 @@ const LEVELS=[
   objects:[{id:"locker",kind:"locker",x:29*32,floor:224,r:30},{id:"gen",kind:"generator",x:38.5*32,floor:320,r:70},
            {id:"panel",kind:"panel",x:45.5*32,floor:320,r:34},{id:"valve",kind:"valve",x:48.6*32,floor:320,r:30},
            {id:"gate",kind:"gate",x:61.2*32,floor:320,r:30}],
-  items:[[9,"canister"],[24,"medkit"]], stashes:[[27,{"9x18":16,"12x70":6}]],
+  items:[[9,"canister"],[24,"medkit"]], stashes:[[27,{"9x18":16,bandage:1}]],
   gems:[[11,7],[20,6],[27,6],[36,7],[44,6],[55,9],[66,7],[71,6],[78,7]],
   enemies:[[13,9,"dog"],[14,9,"dog"],[47,9,"snork"],[72,9,"stalker"],[30,3,"crow"]],
   weather:{fog:.25}, start:2, cps:[34], flag:80, car:4},
@@ -376,6 +426,7 @@ function buildLevel(def){
     if(terr){const sf=surf(c*T+16), s=isFinite(sf)?sf:BASE;y=Math.min(Math.max(y,s-125),s-18);}
     return {x:c*T+16,y,taken:false,k:k%ART_COLORS.length,col:ART_COLORS[k%ART_COLORS.length],ph:k};
   });
+  for(const i of (st.taken&&st.taken[L.name])||[])if(gems[i])gems[i].taken=true;
   enemies=L.enemies.map(([c,r,type],k)=>{
     const d=CFG.enemies[type], hp=type==="big"&&L.bossHp?L.bossHp:d.hp;
     const ex=c*T+(T-d.w)/2;
@@ -399,7 +450,7 @@ function buildLevel(def){
   objs=(L.objects||[]).map(o=>({...o,anim:0}));
   if(L.paint)paintReset();
   const cw=artOn()?CFG.art.car.w:64, ch=artOn()?CFG.art.car.h:34;
-  car=L.car!=null?{noPlat:true,x:L.car*T,y:topAt(L.car*T+cw/2,2)-ch,ang:0,w:cw,h:ch,vx:0,vy:0,onGround:false,coyote:0,face:1,wr:0,hp:CAR_MAX,hit:0,touch:0,zap:0,drive:false,wreck:false,smoke:0}:null;
+  car=L.car!=null&&st.car&&st.car.at===L.name?{noPlat:true,x:L.car*T,y:topAt(L.car*T+cw/2,2)-ch,ang:0,w:cw,h:ch,vx:0,vy:0,onGround:false,coyote:0,face:1,wr:0,hp:Math.max(0,st.car.hp),hit:0,touch:0,zap:0,drive:false,wreck:st.car.hp<=0,smoke:0}:null;
   spawn();
   $("lvlName").textContent=L.name;
   hud();
@@ -505,16 +556,17 @@ function moveY(o){
 
 // ---------- input ----------
 const keys={left:false,right:false,jump:false,fire:false,gren:false,bolt:false,car:false};
-const KMAP={ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",Space:"jump",ArrowUp:"jump",KeyW:"jump",KeyJ:"fire",KeyF:"fire",KeyX:"fire",KeyK:"fire",KeyG:"gren",KeyL:"gren",KeyB:"bolt",KeyQ:"bolt",KeyE:"car",KeyC:"car",KeyH:"med",KeyR:"reload",Digit1:"w1",Digit2:"w2",Digit3:"w3",Digit4:"w4",KeyM:"mute",KeyI:"inv",Tab:"inv",Escape:"esc",KeyN:"bandage",KeyT:"light"};
+const KMAP={ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",Space:"jump",ArrowUp:"jump",KeyW:"jump",KeyJ:"fire",KeyF:"fire",KeyX:"fire",KeyK:"fire",KeyG:"gren",KeyL:"gren",KeyB:"bolt",KeyQ:"bolt",KeyE:"car",KeyC:"car",KeyH:"med",KeyR:"reload",Digit1:"w1",Digit2:"w2",Digit3:"w3",Digit4:"w4",KeyM:"mute",KeyI:"inv",Tab:"inv",Escape:"esc",KeyN:"bandage",KeyT:"light",KeyO:"map"};
 addEventListener("keydown",e=>{const k=KMAP[e.code];if(!k)return;e.preventDefault();
-  if(!$("inv").hidden&&k!=="inv"&&k!=="esc")return;
+  if((!$("inv").hidden||!$("map").hidden)&&k!=="inv"&&k!=="esc"&&k!=="map")return;
   if(k==="gren"&&!e.repeat)gReq=true;
   if(k==="bolt"&&!e.repeat)bReq=true;
   if(k==="car"&&!e.repeat)cReq=true;
   if(k==="med"&&!e.repeat&&running)useItem("medkit");
   if(k==="bandage"&&!e.repeat&&running)useItem("bandage");
   if(k==="inv"&&!e.repeat){if($("inv").hidden)openInv();else closeInv();}
-  if(k==="esc"&&!e.repeat)closeInv();
+  if(k==="esc"&&!e.repeat){closeInv();closeMap();}
+  if(k==="map"&&!e.repeat){if($("map").hidden){if(running)openMap();}else closeMap();}
   if(k==="light"&&!e.repeat){settings.light=!settings.light;saveSettings();}
   if(k==="fire"&&!e.repeat)fireReq=true;
   if(k==="reload"&&!e.repeat)rReq=true;
@@ -538,13 +590,13 @@ tapBtn("bW",()=>{const w=$("wpanel");if(w.hidden)openWeapons();else w.hidden=tru
 $("bMute").addEventListener("click",toggleMute);
 function openWeapons(){
   const w=$("wpanel");
-  w.innerHTML=WEAPON_ORDER.map(id=>{const c=CFG.weapons[id];
+  w.innerHTML=WEAPON_ORDER.filter(id=>id==="nade"||st.owned[id]).map(id=>{const c=CFG.weapons[id];
     return `<button data-w="${id}" class="${st.cur===id?"cur":""}">${c.name}<small>${ammoText(id)}</small></button>`;}).join("");
   w.hidden=false;$("bW").classList.add("on");
 }
 $("wpanel").addEventListener("click",e=>{const b=e.target.closest("button");if(b)selectWeapon(b.dataset.w);});
 function selectWeapon(id){
-  if(!CFG.weapons[id])return;
+  if(!CFG.weapons[id]||id!=="nade"&&!st.owned[id])return;
   $("wpanel").hidden=true;$("bW").classList.remove("on");
   if(st.cur===id)return;
   st.cur=id;if(p){p.reload=0;p.cd=Math.max(p.cd,.15);}SFX.click();hud();
@@ -565,6 +617,62 @@ function overlay(title,text,btn,action,btn2,action2){
 function closeOverlay(a){$("ov").hidden=true;$("diff").hidden=true;ovAction=ovAction2=null;if(a)a();running=true;last=performance.now();}
 $("ovBtn").addEventListener("click",()=>closeOverlay(ovAction));
 $("ovBtn2").addEventListener("click",()=>closeOverlay(ovAction2));
+// ---------- the Zone map: choose where to go and how ----------
+let mapSel=0;
+function routeLen(a,b){const A=ZMAP[LEVELS[a].name], B=ZMAP[LEVELS[b].name];return Math.hypot(A[0]-B[0],A[1]-B[1]);}
+const fuelCost=(a,b)=>Math.max(2,Math.ceil(routeLen(a,b)*CFG.travel.fuelPerUnit));
+function openMap(sel){
+  if(st.hp<=0)return;
+  if(!$("inv").hidden)closeInv();
+  running=false;SFX.ambient(0,0,0);$("wpanel").hidden=true;
+  mapSel=sel==null?lvlIdx:sel;$("map").hidden=false;renderMap();
+}
+function closeMap(){if($("map").hidden)return;$("map").hidden=true;running=true;last=performance.now();}
+function renderMap(){
+  const here=L.sub?lvlIdx:lvlIdx, pts=LEVELS.map(l=>ZMAP[l.name]);
+  let svg=`<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M-2 62 C 20 58, 30 70, 48 60 S 80 48, 102 52" class="river"/>
+    <path d="M60 104 C 58 80, 66 66, 62 46" class="river thin"/>`;
+  for(let i=1;i<LEVELS.length;i++){const a=pts[i-1],b=pts[i];svg+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" class="route ${i<st.open?"open":""}"/>`;}
+  svg+=`</svg>`;
+  let nodes="";
+  LEVELS.forEach((l,i)=>{const [x,y]=pts[i], open=i<st.open, done=st.done.includes(l.name), carHere=st.car&&st.car.at===l.name;
+    nodes+=`<button class="node ${open?"open":"locked"} ${done?"done":""} ${i===here?"here":""} ${i===mapSel?"sel":""}" style="left:${x}%;top:${y}%" data-i="${i}" aria-label="${l.name}">
+      <i></i><span>${l.name}${carHere?" 🚙":""}</span></button>`;});
+  $("zmap").innerHTML=svg+nodes;
+  const i=mapSel, l=LEVELS[i], open=i<st.open, carOk=st.car&&st.car.at===L.name&&(!car||!car.wreck)&&st.car.hp>0;
+  const cost=i===here?0:fuelCost(here,i);
+  let info=`<b>${l.name}</b>`;
+  if(i===here)info+=`<p>Ти тут.${st.done.includes(l.name)?" Локацію пройдено.":""}</p>`;
+  else if(!open)info+=`<p>Закрито. Спочатку пройди «${LEVELS[i-1].name}».</p>`;
+  else{
+    const A=armorOf(), lo=Math.round(CFG.travel.foot[0]*100*(1-A.phys*.5)), hi=Math.round(CFG.travel.foot[1]*100*(1-A.phys*.5));
+    info+=`<p>${st.done.includes(l.name)?"Пройдено раніше. ":""}Дорога пішки небезпечна: −${lo}–${hi}% здоров'я. На УАЗі — без втрат, але потрібно ${cost} л бензину.</p>
+      <div class="mapbtns"><button class="btn ghost" data-go="foot">Пішки</button>
+      <button class="btn" data-go="car" ${carOk&&st.fuel>=cost?"":"disabled"}>На УАЗі · ${cost} л</button></div>`;
+    if(!carOk)info+=`<p class="warn">${!st.car?"УАЗа немає.":st.car.at!==L.name?`УАЗ лишився: ${st.car.at}.`:"УАЗ зламаний — потрібен ремкомплект."}</p>`;
+    else if(st.fuel<cost)info+=`<p class="warn">Мало бензину (${st.fuel} л). Купи в торговця.</p>`;
+  }
+  $("mapInfo").innerHTML=info;
+  $("mapStat").textContent=`HP ${Math.ceil(st.hp)} · бензин ${st.fuel} л`;
+}
+function travel(i,how){
+  const from=lvlIdx;
+  if(i===from||i>=st.open)return;
+  let msg;
+  if(how==="car"){
+    const cost=fuelCost(from,i);
+    if(!(st.car&&st.car.at===L.name&&st.car.hp>0&&(!car||!car.wreck))||st.fuel<cost)return;
+    syncCar();st.fuel-=cost;st.car.at=LEVELS[i].name;msg=`Доїхав на УАЗі без пригод. Витрачено ${cost} л бензину, лишилось ${st.fuel} л.`;
+  }else{
+    const [a,b]=CFG.travel.foot, loss=Math.round(CFG.player.maxHp*(a+Math.random()*(b-a))*(1-armorOf().phys*.5));
+    const before=st.hp;st.hp=Math.max(CFG.travel.minHp,st.hp-loss);syncCar();
+    const what=["зграя сліпих псів","бандити з засідки","кабан на стежці","щури в покинутому підвалі"][Math.floor(Math.random()*4)];
+    msg=`Дорогою напала ${what}. Втрачено ${Math.round(before-st.hp)} HP.`;
+  }
+  $("map").hidden=true;running=true;last=performance.now();
+  enterLevel(i);setTimeout(()=>pda(msg,how!=="car",6),300);
+}
 // a level is always entered through here, so "restart location" has a snapshot to go back to
 function enterLevel(i){
   lvlIdx=i;saved=null;bannerT=0;
@@ -579,8 +687,10 @@ function restartLevel(){st=clone(levelStart.st);gemTotal=levelStart.gemTotal;kil
 // ---------- saves ----------
 const SAVE_KEY="zona.save.v2";
 function readSave(){try{const d=JSON.parse(localStorage.getItem(SAVE_KEY));return d&&d.v===2?d:null;}catch(_){return null;}}
+function syncCar(){if(car&&st.car&&st.car.at===L.name)st.car.hp=car.hp;}
 function saveGame(){
   if(!L||L.sub||!levelStart||st.hp<=0)return;
+  syncCar();
   const d={v:2,order:2,lvl:lvlIdx,cp:cpCol,st,gemTotal,kills,ls:levelStart,
     taken:gems.flatMap((g,i)=>g.taken?[i]:[]),dead:enemies.flatMap((e,i)=>e.alive?[]:[i]),
     picked:pickedMap,
@@ -600,9 +710,14 @@ function loadGame(){
     const fs=freshSt();
     st=Object.assign(fs,d.st);st.items=Object.assign(freshSt().items,d.st.items);
     st.wpn=Object.assign(freshSt().wpn,d.st.wpn);if(!CFG.weapons[st.cur])st.cur="ak";
+    if(!d.st.owned){st.owned={pm:1,sg:1,ak:1};st.armor="jacket";st.fuel=20;st.car={at:LEVELS[d.lvl].name,hp:100};
+      st.open=d.lvl+1;st.done=LEVELS.slice(0,d.lvl).map(l=>l.name);st.taken={};if(!(st.money>=0))st.money=0;}
+    st.owned=Object.assign({pm:1},st.owned);st.done=Array.isArray(st.done)?st.done:[];st.taken=Object.assign({},st.taken);
     st.flags=Object.assign({},d.st.flags);st.killsBy=Object.assign({},d.st.killsBy);st.opened=Array.isArray(d.st.opened)?d.st.opened:[];st.quests=Object.assign({},d.st.quests);
     st.hp=Math.max(1,Math.min(CFG.player.maxHp,+st.hp||CFG.player.maxHp));
     gemTotal=d.gemTotal|0;kills=d.kills|0;levelStart=d.ls||{st:clone(st),gemTotal,kills};
+    // a level-start snapshot from before the map/armour update gets the same new fields
+    for(const k of ["owned","armor","fuel","car","open","done","taken"])if(levelStart.st[k]==null)levelStart.st[k]=clone(st[k]);
     build(lvlIdx);
     for(const i of d.taken||[])if(gems[i])gems[i].taken=true;
     for(const i of d.dead||[])if(enemies[i]){enemies[i].alive=false;enemies[i].dead=9;}
@@ -763,14 +878,25 @@ function renderInv(){
   const w=carried(), it=st.items;
   $("invW").textContent=`${w.toFixed(1)} / ${CFG.weightMax} кг`;$("invW").classList.toggle("over",w>CFG.weightMax);
   $("invStat").innerHTML=`<span>Здоров'я <b>${Math.ceil(st.hp)}</b></span><span>Радіація <b>${Math.round(st.rad)}</b></span>`+
-    `<span>Кровотеча <b>${st.bleed?"так":"ні"}</b></span>${car?`<span>УАЗ <b>${Math.round(car.hp)}%</b></span>`:""}<span>Гроші <b>${st.money||0} ₴</b></span>`;
+    `<span>Кровотеча <b>${st.bleed?"так":"ні"}</b></span><span>УАЗ <b>${st.car?`${Math.round(car&&st.car.at===L.name?car.hp:st.car.hp)}% · ${st.car.at}`:"немає"}</b></span>`+
+    `<span>Бензин <b>${st.fuel||0} л</b></span><span>Гроші <b>${st.money||0} ₴</b></span>`;
   const row=(dot,name,sub,count,btn)=>`<div class="row">${dot?`<span class="dot" style="background:${dot}"></span>`:""}<div class="nm">${name}${sub?`<small>${sub}</small>`:""}</div><span class="ct">${count}</span>${btn||""}</div>`;
   const tabs=invMode==="trade"?[["buy","Купити"],["sell","Продати"]]:[["items","Речі"],["pda","КПК"]];
   $("invTitle").textContent=invMode==="trade"?"Торговець":"Рюкзак";
   $("invTabs").innerHTML=tabs.map(([k,n])=>`<button data-tab="${k}" class="${invTab===k?"on":""}">${n}</button>`).join("");
   if(invTab==="pda"){$("invList").innerHTML=pdaHtml();return;}
   if(invTab==="buy"){
-    $("invList").innerHTML=`<h3>Товар · у тебе ${st.money||0} ₴</h3>`+CFG.shop.map(([k,n,price],i)=>row(null,`${ITEMS[k].name}${n>1?` ×${n}`:""}`,`маєш ${it[k]||0}`,`${price} ₴`,`<button data-act="b:${i}" ${(st.money||0)>=price?"":"disabled"}>Купити</button>`)).join("");
+    const m=st.money||0;
+    let h=`<h3>Броня · у тебе ${m} ₴</h3>`;
+    for(const [id,a] of Object.entries(CFG.armor)){if(!a.price)continue;const on=st.armor===id;
+      h+=row(null,a.name,`захист ${Math.round(a.phys*100)}%${a.anom?` · аномалії ${Math.round(a.anom*100)}%`:""}${a.rad?` · радіація ${Math.round(a.rad*100)}%`:""}${a.slow?` · повільніше`:""}`,`${a.price} ₴`,
+        on?`<button class="cur" disabled>Одягнено</button>`:`<button data-act="a:${id}" ${m>=a.price?"":"disabled"}>Купити</button>`);}
+    h+=`<h3>Зброя</h3>`;
+    for(const id of ["sg","ak"]){const c=CFG.weapons[id], pr=CFG.weaponPrice[id];
+      h+=row(null,c.name,`${c.mag} набоїв у магазині · ${ITEMS[c.ammo].name}`,`${pr} ₴`,st.owned[id]?`<button class="cur" disabled>Є</button>`:`<button data-act="g:${id}" ${m>=pr?"":"disabled"}>Купити</button>`);}
+    h+=`<h3>Припаси</h3>`+CFG.shop.map(([k,n,price],i)=>row(null,`${ITEMS[k].name}${n>1?` ×${n}`:""}`,k==="fuel"?`у баку ${st.fuel||0} з ${CFG.travel.tank} л`:`маєш ${it[k]||0}`,`${price} ₴`,
+      `<button data-act="b:${i}" ${m>=price&&!(k==="fuel"&&st.fuel>=CFG.travel.tank)?"":"disabled"}>Купити</button>`)).join("");
+    $("invList").innerHTML=h;
     return;
   }
   if(invTab==="sell"){
@@ -780,11 +906,15 @@ function renderInv(){
   }
   let h="<h3>Зброя</h3>";
   for(const id of ["pm","sg","ak"]){const c=CFG.weapons[id];
+    if(!st.owned[id]){h+=row(null,c.name,"немає — купи в торговця або підбери в бандитів","—");continue;}
     h+=row(null,c.name,`${ITEMS[c.ammo].name} · ${WEAPON_W[id]} кг`,`${st.wpn[id].mag}/${c.mag}`,`<button data-act="w:${id}" class="${st.cur===id?"cur":""}">${st.cur===id?"В руках":"Взяти"}</button>`);}
+  const A=armorOf();
+  h+=`<h3>Броня</h3>`+row(null,A.name,A.phys||A.anom?`захист ${Math.round(A.phys*100)}%${A.anom?` · аномалії ${Math.round(A.anom*100)}%`:""}${A.rad?` · радіація ${Math.round(A.rad*100)}%`:""}`:"без захисту","");
   h+="<h3>Спорядження</h3>";
   for(const id of ["medkit","bandage","antirad","repair","grenade"]){const d=ITEMS[id];
     h+=row(null,d.name,d.desc||`${d.w} кг`,it[id]||0,d.use?`<button data-act="u:${id}" ${it[id]?"":"disabled"}>Використати</button>`:"");}
   for(const id of ["canister","fuse"])if(it[id])h+=row(null,ITEMS[id].name,ITEMS[id].desc,it[id]);
+  h+=row(null,"Бензин для УАЗа",`бак ${CFG.travel.tank} л · купується в торговця`,`${st.fuel||0} л`);
   h+="<h3>Набої</h3>";
   for(const id of ["9x18","12x70","5.45x39"])h+=row(null,ITEMS[id].name,"",it[id]||0);
   const arts=Object.keys(ITEMS).filter(k=>ITEMS[k].art&&it[k]);
@@ -794,20 +924,27 @@ function renderInv(){
 function pdaHtml(){
   const q=QUESTS.map(q=>{const done=!!st.quests[q.id], n=Math.min(q.goal,q.progress());
     return `<div class="row"><div class="nm">${done?"✓ ":""}${q.name}<small>${q.desc}</small></div><span class="ct">${done?"готово":`${n}/${q.goal}`}</span></div>`;}).join("");
-  const map=LEVELS.map((l,i)=>`<div class="row"><div class="nm">${i<lvlIdx?"✓ ":i===lvlIdx?"● ":""}${l.name}${i===lvlIdx?"<small>ти тут</small>":""}</div><span class="ct">${i<lvlIdx?"пройдено":i===lvlIdx?"":"—"}</span></div>`).join("");
+  const map=LEVELS.map((l,i)=>{const d=st.done.includes(l.name);return `<div class="row"><div class="nm">${d?"✓ ":i===lvlIdx?"● ":""}${l.name}${i===lvlIdx?"<small>ти тут</small>":""}</div><span class="ct">${d?"пройдено":i<st.open?"відкрито":"—"}</span></div>`;}).join("");
   return `<h3>Завдання</h3>${q}<h3>Карта Зони</h3>${map}`+
     `<h3>Статистика</h3><div class="row"><div class="nm">Знайдено артефактів</div><span class="ct">${gemTotal}</span></div>`+
     `<div class="row"><div class="nm">Знищено ворогів</div><span class="ct">${kills}</span></div>`+
     `<div class="row"><div class="nm">Схованок знайдено</div><span class="ct">${st.opened.length}</span></div>`;
 }
 $("bInv").addEventListener("click",()=>{if($("inv").hidden)openInv();else closeInv();});
+$("bMap").addEventListener("click",()=>{if($("map").hidden){if(running)openMap();}else closeMap();});
+$("mapClose").addEventListener("click",closeMap);
+$("zmap").addEventListener("click",e=>{const b=e.target.closest(".node");if(b){mapSel=+b.dataset.i;renderMap();}});
+$("mapInfo").addEventListener("click",e=>{const b=e.target.closest("button[data-go]");if(b&&!b.disabled)travel(mapSel,b.dataset.go);});
 $("invClose").addEventListener("click",closeInv);
 $("invTabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b){invTab=b.dataset.tab;renderInv();}});
 $("invList").addEventListener("click",e=>{
   const b=e.target.closest("button[data-act]");if(!b)return;
   const [k,id]=b.dataset.act.split(":");
   if(k==="w")selectWeapon(id);
-  else if(k==="b"){const [it,n,price]=CFG.shop[+id];if((st.money||0)>=price){st.money-=price;st.items[it]=(st.items[it]||0)+n;SFX.pickup();hud();}}
+  else if(k==="b"){const [it,n,price]=CFG.shop[+id];if((st.money||0)>=price){st.money-=price;
+    if(it==="fuel")st.fuel=Math.min(CFG.travel.tank,(st.fuel||0)+n);else st.items[it]=(st.items[it]||0)+n;SFX.pickup();hud();}}
+  else if(k==="a"){const a=CFG.armor[id];if(a&&st.money>=a.price&&st.armor!==id){st.money-=a.price;st.armor=id;SFX.reload();hud();}}
+  else if(k==="g"){const pr=CFG.weaponPrice[id];if(st.money>=pr&&!st.owned[id]){st.money-=pr;giveWeapon(id,true);}}
   else if(k==="s"||k==="S"){const n=k==="S"?st.items[id]:1;if(n>0){st.items[id]-=n;st.money=(st.money||0)+ITEMS[id].val*n;st.sold=(st.sold||0)+n;SFX.pickup();questCheck();hud();}}
   else useItem(id);
   renderInv();
@@ -820,7 +957,8 @@ function saveBest(v){try{localStorage.setItem("zoneBest",String(v))}catch(_){}}
 function hurtP(n,o={}){
   if(st.hp<=0)return true;
   if(!o.force&&p.inv>0)return false;
-  n=Math.max(1,Math.round(n*CFG.difficulty[settings.diff].dmg));
+  const A=armorOf(), red=o.kind==="fall"?0:o.kind==="anom"?A.anom:A.phys;
+  n=Math.max(1,Math.round(n*(1-red)*CFG.difficulty[settings.diff].dmg));
   st.hp=Math.max(0,st.hp-n);
   p.inv=CFG.player.invuln;p.hurtT=.3;fx.hit=.35;shake=Math.max(shake,.12);SFX.hurt();
   burst(p.x+p.w/2,Math.min(p.y+p.h/2,VIEW_H-20),"#d9493f",8,.7);
@@ -842,7 +980,7 @@ function drain(n){
 }
 // falling into a pit (or acid) is the only thing that sends you back to the checkpoint
 function fellOff(dmg){
-  if(hurtP(dmg,{force:true}))return;
+  if(hurtP(dmg,{force:true,kind:"fall"}))return;
   spawn();p.inv=1.2;
 }
 function finishLevel(){
@@ -852,9 +990,13 @@ function finishLevel(){
     try{localStorage.removeItem(SAVE_KEY);}catch(_){}
     overlay("Ти дійшов до ЧАЕС!",`Артефактів: <span class="big">${gemTotal} з ${maxGems}</span><br>Знищено ворогів: ${kills}<br>Рекорд артефактів: ${best}`,"Знову в Зону",newGame);
   }else{
-    st.items.medkit++;
+    // step back from the exit so closing the map does not finish the location again
+    if(driving()){car.x=L.flag*T-car.w-24;car.vx=0;}else{p.x=L.flag*T-40;p.vx=0;}
+    const first=!st.done.includes(L.name);
+    if(first){st.done.push(L.name);st.items.medkit++;}
+    st.open=Math.max(st.open||1,lvlIdx+2);saveGame();
     const n=LEVELS[lvlIdx+1];
-    overlay(`${L.name}: пройдено`,`Наступна локація: <span class="big">${n.name}</span><br>Знайдено аптечку: +1`,"Далі",()=>enterLevel(lvlIdx+1));
+    overlay(`${L.name}: пройдено`,`${first?"Знайдено аптечку: +1<br>":""}Відкрито нову локацію: <span class="big">${n.name}</span><br>Обери на карті, куди йти далі — пішки чи на УАЗі.`,"Карта Зони",()=>openMap(lvlIdx+1));
   }
 }
 const anomAt=(c,r)=>anoms.find(a=>a.r===r&&c>=a.c0&&c<=a.c1);
@@ -888,18 +1030,18 @@ function anomalies(){
         a.cool=time+1.2;a.reveal=Math.max(a.reveal,time+2);
         const side=Math.random()<.5?-1:1;burst(a.cx,gy-10,"#cfe0ff",14,.8);shake=.2;
         if(drv){carDamage(A.gravity.carDmg);car.vy=-380;car.vx=side*200;}
-        else{p.vy=-520;p.vx=side*240;if(hurtP(A.gravity.dmg,{force:true}))return true;}
+        else{p.vy=-520;p.vx=side*240;if(hurtP(A.gravity.dmg,{force:true,kind:"anom"}))return true;}
       }
       continue;
     }
     if(!anomOn(a)||bd.x+bd.w<=a.x0||bd.x>=a.x1)continue;
     if(a.t==="^"&&foot>a.r*T+14){
       if(drv){if(car.zap<=0){car.zap=.6;car.vy=-320;carDamage(A.electra.carDmg);burst(a.cx,gy-6,"#e6f4ff",10,.6);}}
-      else if(hurtP(A.electra.dmg,{from:a.cx}))return true;
+      else if(hurtP(A.electra.dmg,{from:a.cx,kind:"anom"}))return true;
     }
     if(a.t==="F"&&foot>gy-A.fire.height){
       if(drv){if(car.zap<=0){car.zap=.6;car.vy=-260;carDamage(A.fire.carDmg);}}
-      else if(hurtP(A.fire.dmg,{from:a.cx}))return true;
+      else if(hurtP(A.fire.dmg,{from:a.cx,kind:"anom"}))return true;
     }
   }
   return false;
@@ -940,7 +1082,8 @@ function damage(e,n,kick=0){
   if(e.hp<=0){e.alive=false;e.state="dead";kills++;st.killsBy[e.type]=(st.killsBy[e.type]||0)+1;questCheck();hud();burst(e.x+e.w/2,e.y+e.h/2,DEATH_COL[e.type],e.type==="big"?26:12);
     if(e.type!=="stalker")burst(e.x+e.w/2,e.y+e.h/2,"#a8c94a",5);
     else{
-      const r=Math.random(), drop=r<.15?{kind:"medkit",n:1}:r<.27?{kind:"bandage",n:1}:r<.35?{kind:"antirad",n:1}:r<.47?{kind:"grenade",n:1}:r<.62?{kind:"12x70",n:6}:r<.8?{kind:"9x18",n:16}:{kind:"5.45x39",n:30};
+      const r=Math.random(), gun=!st.owned.ak&&Math.random()<.22?"w_ak":!st.owned.sg&&Math.random()<.3?"w_sg":null;
+      const drop=gun?{kind:gun,n:1}:r<.15?{kind:"medkit",n:1}:r<.27?{kind:"bandage",n:1}:r<.35?{kind:"antirad",n:1}:r<.47?{kind:"grenade",n:1}:r<.62?{kind:"12x70",n:6}:r<.8?{kind:"9x18",n:16}:{kind:"5.45x39",n:30};
       pickups.push({x:e.x+e.w/2-5,y:e.y+e.h-16,vy:-220,...drop});
     }}
 }
@@ -1019,7 +1162,7 @@ function radAt(x){let s=0;for(const [c,w,k] of L.rad||[])if(x>=c*T&&x<(c+w)*T)s=
 let tickT=0;
 function statusEffects(){
   const bd=body(), cx=bd.x+bd.w/2, zone=radAt(cx);
-  if(zone)st.rad=Math.min(100,st.rad+zone*dt);
+  if(zone)st.rad=Math.min(100,st.rad+zone*(1-armorOf().rad)*dt);
   else st.rad=Math.max(0,st.rad-CFG.rad.decay*dt);
   for(const [lvl,dps] of CFG.rad.hurt)if(st.rad>=lvl){if(drain(dps*dt))return true;break;}
   if(st.bleed){
@@ -1201,6 +1344,16 @@ function lineOfSight(e){
   return true;
 }
 // ---------- weapons ----------
+// a new gun comes with a loaded magazine (a picked-up one is half empty) and goes straight into the hands
+function giveWeapon(id,bought){
+  if(!CFG.weapons[id])return;
+  const c=CFG.weapons[id], had=st.owned[id];
+  st.owned[id]=1;
+  if(had){st.items[c.ammo]=(st.items[c.ammo]||0)+Math.ceil(c.mag/2);note(`+${Math.ceil(c.mag/2)} ${ITEMS[c.ammo].short}`);}
+  else{st.wpn[id].mag=bought?c.mag:Math.ceil(c.mag/2);st.cur=id;if(p){p.reload=0;p.cd=.2;}
+    pda(`${bought?"Куплено":"Підібрано"}: ${c.name}. ${bought?"":"Магазин наполовину порожній."}`,false,4);}
+  SFX.reload();hud();
+}
 function throwGrenade(){
   if(st.items.grenade<=0){note("Немає гранат");SFX.empty();return;}
   st.items.grenade--;hud();SFX.throw();
@@ -1393,7 +1546,7 @@ function update(){
     p.x=car.x+car.w/2-p.w/2;p.y=car.y+car.h-p.h;p.vx=car.vx;p.vy=car.vy;p.face=car.face;p.inv=0;
     if(car.y>VIEW_H+60){car=null;hud();fellOff(CFG.dmg.fall);return;}
   }else{
-  const dir=(keys.right?1:0)-(keys.left?1:0), mx=carried()>CFG.weightMax?MAX*CFG.overloadSpeed:MAX;
+  const dir=(keys.right?1:0)-(keys.left?1:0), mx=(carried()>CFG.weightMax?MAX*CFG.overloadSpeed:MAX)*(1-armorOf().slow);
   if(dir){p.vx+=dir*ACC*dt*(p.onGround?1:.75);if(Math.abs(p.vx)>mx&&Math.sign(p.vx)===dir)p.vx=dir*Math.max(mx,Math.abs(p.vx)-ACC*dt);p.face=dir;}
   else{const f=FR*dt*(p.onGround?1:.4);p.vx=Math.abs(p.vx)<=f?0:p.vx-Math.sign(p.vx)*f;}
   p.vy=Math.min(p.vy+G*dt,900);
@@ -1482,6 +1635,7 @@ function update(){
     else if(k.vy>0&&standable(tile(c,r))&&k.y+12-k.vy*dt<=r*T+1){k.y=r*T-12;k.vy=0;}
     const bd=body();
     if(Math.abs(bd.x+bd.w/2-(k.x+5))<bd.w/2+7&&Math.abs(bd.y+bd.h/2-(k.y+6))<22){k.taken=true;
+      if(k.kind.startsWith("w_")){giveWeapon(k.kind.slice(2));continue;}
       st.items[k.kind]=(st.items[k.kind]||0)+k.n;if(k.map)pickedMap.push(k.map);hud();SFX.pickup();
       texts.push({x:k.x+5,y:k.y-6,s:`+${k.n} ${ITEMS[k.kind].short}`,life:1});burst(k.x+5,k.y+6,"#c3d08a",8,.5);}
   }
@@ -1510,7 +1664,7 @@ function update(){
 
   for(const g of gems){
     if(g.taken)continue;
-    if(Math.abs(bd.x+bd.w/2-g.x)<bd.w/2+9&&Math.abs(bd.y+bd.h/2-g.y)<bd.h/2+8){g.taken=true;gemTotal++;questCheck();const a="art"+g.k;st.items[a]=(st.items[a]||0)+1;hud();burst(g.x,g.y,g.col,10);SFX.pickup();
+    if(Math.abs(bd.x+bd.w/2-g.x)<bd.w/2+9&&Math.abs(bd.y+bd.h/2-g.y)<bd.h/2+8){g.taken=true;gemTotal++;st.taken=st.taken||{};(st.taken[L.name]||(st.taken[L.name]=[])).push(gems.indexOf(g));questCheck();const a="art"+g.k;st.items[a]=(st.items[a]||0)+1;hud();burst(g.x,g.y,g.col,10);SFX.pickup();
       texts.push({x:g.x,y:g.y-10,s:ITEMS[a].name,life:1,col:g.col});}
   }
 
@@ -2861,6 +3015,11 @@ function draw(){
   }
   for(const k of pickups){const bob=k.vy===0?Math.sin(time*4+k.x)*1.5:0;
     if(paintedProp(k))continue;
+    if(k.kind.startsWith("w_")){const wi=sprImg("weapons"), wn=k.kind, f=SPR.weapons[wn];
+      ctx.shadowColor="#e5c33a";ctx.shadowBlur=10;
+      if(wi&&f){const sc=26/f[2];ctx.drawImage(wi,f[0],f[1],f[2],f[3],k.x+5-13,k.y+8+bob-f[3]*sc,f[2]*sc,f[3]*sc);}
+      else{ctx.fillStyle="#3a3a30";ctx.fillRect(k.x-8,k.y+4+bob,26,4);}
+      ctx.shadowBlur=0;continue;}
     ctx.shadowColor="#e5c33a";ctx.shadowBlur=8;
     if(k.kind==="medkit")medkitSprite(k.x+5,k.y+6+bob);
     else if(AMMO_COL[k.kind])ammoSprite(k.x+5,k.y+7+bob,k.kind);
