@@ -572,12 +572,13 @@ addEventListener("keydown",e=>{const k=KMAP[e.code];if(!k)return;e.preventDefaul
   if(k==="reload"&&!e.repeat)rReq=true;
   if(k==="mute"&&!e.repeat)toggleMute();
   if(k[0]==="w"&&k.length===2&&!e.repeat)selectWeapon(WEAPON_ORDER[+k[1]-1]);
+  if((k==="left"||k==="right"||k==="jump")&&p&&p.hidden)leaveShelter();
   if(k==="jump"&&!keys.jump&&p)p.buf=.12; keys[k]=true;
   if(k==="jump"&&!running&&!$("ov").hidden&&!e.repeat)$("ovBtn").click();});
 addEventListener("keyup",e=>{const k=KMAP[e.code];if(k)keys[k]=false;});
 function bindBtn(id,k){
   const b=$(id);
-  const on=e=>{e.preventDefault();if(k==="gren")gReq=true;if(k==="bolt")bReq=true;if(k==="car")cReq=true;if(k==="fire")fireReq=true;if(k==="jump"&&!keys.jump&&p)p.buf=.12;keys[k]=true;b.classList.add("on");try{b.setPointerCapture(e.pointerId)}catch(_){}};
+  const on=e=>{e.preventDefault();if((k==="left"||k==="right"||k==="jump")&&p&&p.hidden)leaveShelter();if(k==="gren")gReq=true;if(k==="bolt")bReq=true;if(k==="car")cReq=true;if(k==="fire")fireReq=true;if(k==="jump"&&!keys.jump&&p)p.buf=.12;keys[k]=true;b.classList.add("on");try{b.setPointerCapture(e.pointerId)}catch(_){}};
   const off=()=>{keys[k]=false;b.classList.remove("on");};
   b.addEventListener("pointerdown",on);
   ["pointerup","pointercancel","lostpointercapture"].forEach(ev=>b.addEventListener(ev,off));
@@ -862,11 +863,27 @@ function objUpdate(){
 }
 // the ДІЯ button does whatever is in reach: a machine, the trader, a stash, then the UAZ
 function action(){
+  if(p.hidden){leaveShelter();return;}
   const o=objNear();if(o){objUse(o);return;}
   if(nearTrader()){openTrade();return;}
   const sh=nearStash();if(sh){openStash(sh);return;}
+  const door=nearShelterDoor();if(door!=null){enterShelter(door);return;}
   toggleCar();
 }
+// ---------- shelters: step inside through the door ----------
+// inside, monsters and bandits lose you, bullets miss, the blowout and radiation cannot reach you
+function nearShelterDoor(){
+  if(L.sub||driving()||!p.onGround)return null;
+  const cx=p.x+p.w/2;
+  for(const [c,w] of L.shelters||[]){const d=(c+w/2)*T;if(Math.abs(cx-d)<24)return d;}
+  return null;
+}
+function enterShelter(door){
+  p.hidden=true;p.x=door-p.w/2;p.vx=0;p.buf=0;SFX.click();
+  for(const e of enemies)if(e.alive&&(e.state==="chase"||e.state==="detect"||e.state==="attack")&&e.type!=="crow")setState(e,"patrol",3);
+  note("Ти в укритті");
+}
+function leaveShelter(){p.hidden=false;p.buf=0;SFX.click();}
 function pda(msg,alarm,sec=5){$("pdaText").textContent=msg;$("pda").classList.toggle("alarm",!!alarm);$("pda").hidden=false;pdaT=sec;SFX.pda();}
 
 // ---------- backpack (pauses the game) ----------
@@ -1100,7 +1117,7 @@ function explode(n){
 }
 // ---------- blowout ----------
 const inShelter=()=>{
-  if(L.sub)return true;
+  if(L.sub||p.hidden)return true;
   if(driving())return false;
   const cx=p.x+p.w/2;return (L.shelters||[]).some(([c,w])=>cx>c*T+2&&cx<(c+w)*T-2);
 };
@@ -1162,7 +1179,7 @@ function radAt(x){let s=0;for(const [c,w,k] of L.rad||[])if(x>=c*T&&x<(c+w)*T)s=
 let tickT=0;
 function statusEffects(){
   const bd=body(), cx=bd.x+bd.w/2, zone=radAt(cx);
-  if(zone)st.rad=Math.min(100,st.rad+zone*(1-armorOf().rad)*dt);
+  if(zone&&!p.hidden)st.rad=Math.min(100,st.rad+zone*(1-armorOf().rad)*dt);
   else st.rad=Math.max(0,st.rad-CFG.rad.decay*dt);
   for(const [lvl,dps] of CFG.rad.hurt)if(st.rad>=lvl){if(drain(dps*dt))return true;break;}
   if(st.bleed){
@@ -1245,7 +1262,7 @@ function groundAI(e,G){
   const C=CFG.enemies[e.type], t=body();
   e.vy=Math.min(e.vy+G*dt,900);
   const dx=(t.x+t.w/2)-(e.x+e.w/2), dy=(t.y+t.h)-(e.y+e.h), adx=Math.abs(dx);
-  const see=st.hp>0&&adx<C.detect&&Math.abs(dy)<90&&lineOfSight(e);
+  const see=st.hp>0&&!p.hidden&&adx<C.detect&&Math.abs(dy)<90&&lineOfSight(e);
   e.st-=dt;e.reveal-=dt;
   // small mutants scatter from a speeding UAZ
   if(C.flee&&driving()&&Math.abs(car.vx)>150&&e.state!=="attack"&&Math.sign(car.vx)===Math.sign(-dx)&&adx<170){
@@ -1299,7 +1316,7 @@ function crowAI(e){
     else{e.x+=(hx-e.x)/d*150*dt;e.y+=(hy-e.y)/d*150*dt;e.face=hx>=e.x?1:-1;}
   }else{
     const px=e.x;e.x=e.ox+Math.sin(e.t*.9)*80;e.y=e.oy+Math.sin(e.t*2.3)*12;e.face=e.x>=px?1:-1;
-    if(st.hp>0&&e.cd<=0&&Math.abs(tx-e.x)<C.detect&&ty>e.y+20){
+    if(st.hp>0&&!p.hidden&&e.cd<=0&&Math.abs(tx-e.x)<C.detect&&ty>e.y+20){
       const d=Math.hypot(tx-e.x,ty-e.y)||1;
       setState(e,"attack",1.4);e.vx=(tx-e.x)/d*250;e.vy=(ty-e.y)/d*250;SFX.growl("crow");
     }
@@ -1325,7 +1342,7 @@ function contact(e){
     }
     return false;
   }
-  if(!overlap(p,e))return false;
+  if(p.hidden||!overlap(p,e))return false;
   if(p.vy>0&&p.y+p.h-e.y<16){damage(e,CFG.stomp);p.vy=keys.jump?-560:-420;return false;}
   // only a real attack hurts: walking into a patrolling monster does nothing
   if(e.state==="attack"&&!e.didHit&&C.dmg&&e.type!=="bloodsucker"&&e.type!=="controller"&&e.type!=="stalker"){
@@ -1371,7 +1388,7 @@ function weaponUpdate(){
   // a tap is remembered briefly, so presses during the switch delay or the last shot are not lost
   p.fireBuf=fireReq?.25:(p.fireBuf||0)-dt;fireReq=rReq=false;
   const req=p.fireBuf>0&&p.cd<=0;
-  if(driving())return;
+  if(driving()||p.hidden)return;
   if(id==="nade"){if(req){p.fireBuf=0;p.cd=.5;throwGrenade();}return;}
   const s=st.wpn[id];
   if(p.reload>0){
@@ -1546,7 +1563,9 @@ function update(){
     p.x=car.x+car.w/2-p.w/2;p.y=car.y+car.h-p.h;p.vx=car.vx;p.vy=car.vy;p.face=car.face;p.inv=0;
     if(car.y>VIEW_H+60){car=null;hud();fellOff(CFG.dmg.fall);return;}
   }else{
-  const dir=(keys.right?1:0)-(keys.left?1:0), mx=(carried()>CFG.weightMax?MAX*CFG.overloadSpeed:MAX)*(1-armorOf().slow);
+  if(p.hidden&&(keys.left||keys.right||p.buf>0))leaveShelter();
+  if(p.hidden)gReq=bReq=false;
+  const dir=p.hidden?0:(keys.right?1:0)-(keys.left?1:0), mx=(carried()>CFG.weightMax?MAX*CFG.overloadSpeed:MAX)*(1-armorOf().slow);
   if(dir){p.vx+=dir*ACC*dt*(p.onGround?1:.75);if(Math.abs(p.vx)>mx&&Math.sign(p.vx)===dir)p.vx=dir*Math.max(mx,Math.abs(p.vx)-ACC*dt);p.face=dir;}
   else{const f=FR*dt*(p.onGround?1:.4);p.vx=Math.abs(p.vx)<=f?0:p.vx-Math.sign(p.vx)*f;}
   p.vy=Math.min(p.vy+G*dt,900);
@@ -1646,6 +1665,7 @@ function update(){
     b.x+=b.vx*dt;b.life-=dt;
     if(solid(Math.floor(b.x/T),Math.floor(b.y/T))||b.y>surf(b.x)){b.life=0;burst(b.x,b.y,"#f3d27a",3,.4);continue;}
     if(driving()){if(b.x>car.x&&b.x<car.x+car.w&&b.y>car.y&&b.y<car.y+car.h){b.life=0;burst(b.x,b.y,"#f3d27a",4,.5);carDamage(4);}continue;}
+    if(p.hidden)continue;
     if(b.x>p.x&&b.x<p.x+p.w&&b.y>p.y&&b.y<p.y+p.h){b.life=0;if(hurtP(CFG.dmg.bandit,{from:b.x-b.vx}))return;}
   }
   ebullets=ebullets.filter(b=>b.life>0);
@@ -1970,6 +1990,7 @@ function drawStalker(){
   ctx.save();
   // hit invulnerability: flicker instead of vanishing
   if(p.inv>0&&st.hp>0&&Math.floor(time*12)%2)ctx.globalAlpha=.45;
+  if(p.hidden)ctx.globalAlpha=.35;
   ctx.translate(p.x+p.w/2,p.y+p.h+(name==="st_dead"?2:0));ctx.scale(p.face*k,k);
   ctx.drawImage(im,sx,sy,sw,sh,-ax,-ay,sw,sh);
   // the selected weapon in the hand (the AK frames already hold one)
@@ -2011,7 +2032,7 @@ function drawCar(){
     ctx.fillStyle="rgba(0,0,0,.5)";ctx.fillRect(c.x+7,by,c.w-14,4);
     ctx.fillStyle=carCol(c.hp);ctx.fillRect(c.x+7,by,(c.w-14)*c.hp/CAR_MAX,4);
   }
-  if(!c.drive&&overlap(p,c,14)&&!nearStash()&&!nearTrader()&&!objNear()){
+  if(!c.drive&&overlap(p,c,14)&&!nearStash()&&!nearTrader()&&!objNear()&&nearShelterDoor()==null&&!p.hidden){
     ctx.font="800 12px Nunito, system-ui, sans-serif";ctx.textAlign="center";
     const s=c.wreck?(touchUI?"ДІЯ — полагодити":"E — полагодити"):touchUI?"ДІЯ — сісти в УАЗ":"E — сісти в УАЗ";
     ctx.fillStyle="#1b1e18";ctx.fillText(s,c.x+c.w/2+1,c.y-17);ctx.fillStyle="#e8f0b0";ctx.fillText(s,c.x+c.w/2,c.y-18);
@@ -2799,7 +2820,7 @@ function contactShadow(x,y,rx){ctx.save();ctx.translate(x,y);ctx.scale(1,.22);bl
 function drawPrompts(){
   const o=objNear(), os=o&&objState(o);
   if(os&&os.need)needIcon(o.x,o.floor-({locker:66,generator:104,panel:112,valve:88,gate:120}[o.kind]||90),os.need);
-  const s=os?(os.use?os.label:""):nearTrader()?"торговець":nearStash()?"відкрити схованку":"";
+  const s=p.hidden?"вийти з укриття":os?(os.use?os.label:""):nearTrader()?"торговець":nearStash()?"відкрити схованку":nearShelterDoor()!=null?"сховатися в укритті":"";
   // above the head of the tall painted stalker
   const ty=artOn()&&sprImg("stalker")?p.y+p.h-54:p.y-22;
   const say=(t,col)=>{ctx.font="800 12px Nunito, system-ui, sans-serif";ctx.textAlign="center";ctx.fillStyle="#1b1e18";ctx.fillText(t,p.x+p.w/2+1,ty+1);ctx.fillStyle=col;ctx.fillText(t,p.x+p.w/2,ty);};
@@ -2960,6 +2981,7 @@ function draw(){
     ctx.fillStyle="#6a6c62";ctx.fillRect(x0-4,gy-H-6,x1-x0+8,8);
     ctx.fillStyle="rgba(0,0,0,.18)";for(let y=gy-H+14;y<gy;y+=16)ctx.fillRect(x0,y,x1-x0,1.5);
     ctx.fillStyle="#141512";ctx.fillRect(x0+(x1-x0)/2-14,gy-44,28,44);
+    if(p.hidden&&Math.abs(p.x+p.w/2-(x0+x1)/2)<30){ctx.fillStyle="rgba(255,196,120,.28)";ctx.fillRect(x0+(x1-x0)/2-14,gy-44,28,44);}
     ctx.fillStyle=safe?"#7fe08a":"#e5c33a";ctx.font="bold 9px system-ui, sans-serif";ctx.textAlign="center";ctx.fillText("УКРИТТЯ",(x0+x1)/2,gy-H+11);
     if(safe){ctx.fillStyle=`rgba(127,224,138,${.35+.25*Math.sin(time*6)})`;ctx.fillRect(x0+(x1-x0)/2-14,gy-46,28,3);}
   }
